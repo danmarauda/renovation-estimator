@@ -25,15 +25,20 @@ export function createStage({ canvas, host, reducedMotion, brandColor, coarse })
   renderer.toneMappingExposure = 1.0;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
-  const pr = Math.min(window.devicePixelRatio || 1, coarse ? 1.75 : 2);
-  renderer.setPixelRatio(pr);
-  setAnisotropy(renderer.capabilities.getMaxAnisotropy());
+  let pr = 1;
+  renderer.shadowMap.autoUpdate = false;
+  renderer.shadowMap.needsUpdate = true;
+  setAnisotropy(Math.min(coarse ? 4 : 8, renderer.capabilities.getMaxAnisotropy()));
   RectAreaLightUniformsLib.init();
 
   const scene = new THREE.Scene();
   const pmrem = new THREE.PMREMGenerator(renderer);
-  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  const environment = new RoomEnvironment();
+  const environmentTarget = pmrem.fromScene(environment, 0.04);
+  scene.environment = environmentTarget.texture;
   scene.environmentIntensity = 0.95;
+  environment.dispose();
+  pmrem.dispose();
 
   const camera = new THREE.PerspectiveCamera(38, 1, 0.05, 80);
   const key = new THREE.DirectionalLight(0xFFF3E6, 2.4);
@@ -57,7 +62,10 @@ export function createStage({ canvas, host, reducedMotion, brandColor, coarse })
   controls.autoRotateSpeed = 0.7;
 
   // ---------------------------------------------------------------- post: render -> selection outline -> output
-  const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
+  const rt = new THREE.WebGLRenderTarget(1, 1, {
+    type: THREE.HalfFloatType,
+    samples: Math.min(coarse ? 0 : 2, renderer.capabilities.maxSamples),
+  });
   const composer = new EffectComposer(renderer, rt);
   composer.addPass(new RenderPass(scene, camera));
   const outline = new OutlinePass(new THREE.Vector2(1, 1), scene, camera);
@@ -69,15 +77,26 @@ export function createStage({ canvas, host, reducedMotion, brandColor, coarse })
   composer.addPass(new OutputPass());
 
   let room = null, needs = true, tweens = [], fit = 1, nightT = 0, selected = null, previewing = null;
-  const invalidate = () => { needs = true; };
+  let raf = 0, disposed = false, inView = true, lastFrame = null;
+  function schedule() {
+    if (!raf && !disposed && !document.hidden && inView) raf = requestAnimationFrame(loop);
+  }
+  function invalidate({ shadows = false } = {}) {
+    needs = true;
+    if (shadows) renderer.shadowMap.needsUpdate = true;
+    schedule();
+  }
   controls.addEventListener('change', invalidate);
 
   // ---------------------------------------------------------------- size
   function resize() {
     const w = Math.max(1, host.clientWidth), h = Math.max(1, host.clientHeight);
+    // Bound the whole post-processing pipeline, not just the visible canvas, on large HiDPI screens.
+    pr = Math.min(window.devicePixelRatio || 1, coarse ? 1.5 : 2, Math.sqrt((coarse ? 2_000_000 : 4_000_000) / (w * h)));
+    renderer.setPixelRatio(pr);
     renderer.setSize(w, h, false);
-    composer.setPixelRatio(pr); composer.setSize(w, h);
-    outline.resolution.set(w * pr, h * pr);
+    composer.setPixelRatio(pr);
+    composer.setSize(w, h);
     camera.aspect = w / h;
     // narrow screens: step back so the whole kitchen still fits
     const nf = Math.max(1, 1.22 / camera.aspect) ** 0.85;
@@ -90,13 +109,27 @@ export function createStage({ canvas, host, reducedMotion, brandColor, coarse })
     controls.update();
     invalidate();
   }
-  new ResizeObserver(resize).observe(host);
+  const resizeObserver = new ResizeObserver(resize);
+  resizeObserver.observe(host);
+  function updateVisibility() {
+    cancelAnimationFrame(raf);
+    raf = 0;
+    lastFrame = null;
+    invalidate();
+  }
+  const intersectionObserver = new IntersectionObserver(([entry]) => {
+    inView = entry.isIntersecting;
+    updateVisibility();
+  });
+  intersectionObserver.observe(host);
+  document.addEventListener('visibilitychange', updateVisibility);
 
   // ---------------------------------------------------------------- tweens
   function tween(dur, step, done) {
     if (reducedMotion || dur <= 0) { step(1); done && done(); invalidate(); return; }
     const tw = { t0: performance.now(), dur, step, done };
     tweens.push(tw);
+    invalidate();
     return tw;
   }
   let fly = null;
@@ -114,11 +147,12 @@ export function createStage({ canvas, host, reducedMotion, brandColor, coarse })
     const s0 = new THREE.Spherical().setFromVector3(p0.clone().sub(t0));
     const s1 = new THREE.Spherical().setFromVector3(pos.clone().sub(target));
     if (fly) tweens = tweens.filter((t) => t !== fly);
+    const tg = new THREE.Vector3(), offset = new THREE.Vector3(), s = new THREE.Spherical();
     fly = tween(dur, (k) => {
       const e = easeInOut(k);
-      const tg = t0.clone().lerp(target, e);
-      const s = new THREE.Spherical(lerp(s0.radius, s1.radius, e), lerp(s0.phi, s1.phi, e), lerp(s0.theta, s1.theta, e));
-      camera.position.copy(tg).add(new THREE.Vector3().setFromSpherical(s));
+      tg.copy(t0).lerp(target, e);
+      s.set(lerp(s0.radius, s1.radius, e), lerp(s0.phi, s1.phi, e), lerp(s0.theta, s1.theta, e));
+      camera.position.copy(tg).add(offset.setFromSpherical(s));
       controls.target.copy(tg);
       camera.lookAt(tg);
     }, () => { fly = null; controls.update(); });
@@ -127,7 +161,10 @@ export function createStage({ canvas, host, reducedMotion, brandColor, coarse })
   // ---------------------------------------------------------------- loop
   let autoRotate = false;
   function loop(now) {
-    requestAnimationFrame(loop);
+    raf = 0;
+    if (disposed || document.hidden || !inView) { lastFrame = null; return; }
+    const delta = lastFrame === null ? 1 / 60 : Math.min((now - lastFrame) / 1000, 0.1);
+    lastFrame = now;
     if (tweens.length) {
       tweens = tweens.filter((tw) => {
         const k = Math.min(1, (now - tw.t0) / tw.dur);
@@ -142,10 +179,12 @@ export function createStage({ canvas, host, reducedMotion, brandColor, coarse })
       if (az <= controls.minAzimuthAngle + 0.02) controls.autoRotateSpeed = -Math.abs(controls.autoRotateSpeed);
       if (az >= controls.maxAzimuthAngle - 0.02) controls.autoRotateSpeed = Math.abs(controls.autoRotateSpeed);
     }
-    if (!fly && controls.update()) needs = true;
-    if (needs) { needs = false; composer.render(); }
+    const moving = !fly && controls.update(delta);
+    if (moving) needs = true;
+    if (needs) { needs = false; composer.render(delta); }
+    if (tweens.length || autoRotate || moving || needs) schedule();
+    else lastFrame = null;
   }
-  requestAnimationFrame(loop);
 
   // ---------------------------------------------------------------- picking
   const ray = new THREE.Raycaster();
@@ -166,7 +205,11 @@ export function createStage({ canvas, host, reducedMotion, brandColor, coarse })
 
   // ---------------------------------------------------------------- selection outline
   function outlineFor(id) { return id && room ? room.partObjects[id] || [] : []; }
-  function refreshOutline() { outline.selectedObjects = outlineFor(previewing || selected); invalidate(); }
+  function refreshOutline() {
+    outline.selectedObjects = outlineFor(previewing || selected);
+    outline.enabled = outline.selectedObjects.length > 0;
+    invalidate();
+  }
   function select(id) { selected = id; refreshOutline(); }
   function preview(id) { previewing = id; refreshOutline(); }
   function pulse() {
@@ -175,10 +218,12 @@ export function createStage({ canvas, host, reducedMotion, brandColor, coarse })
   }
 
   // ---------------------------------------------------------------- day and evening
+  let eveningTween = null;
   function setEvening(on) {
     const from = nightT, to = on ? 1 : 0;
+    if (eveningTween) tweens = tweens.filter((item) => item !== eveningTween);
     host.classList.toggle('is-evening', on);
-    tween(900, (k) => {
+    eveningTween = tween(900, (k) => {
       const t = lerp(from, to, easeInOut(k));
       nightT = t;
       scene.environmentIntensity = lerp(0.95, 0.05, t);
@@ -190,7 +235,7 @@ export function createStage({ canvas, host, reducedMotion, brandColor, coarse })
   }
 
   // ---------------------------------------------------------------- keyboard orbit on the canvas
-  canvas.addEventListener('keydown', (e) => {
+  function onKeyDown(e) {
     const step = 0.14;
     let used = true;
     switch (e.key) {
@@ -202,19 +247,42 @@ export function createStage({ canvas, host, reducedMotion, brandColor, coarse })
       case '-': case '_': controls.dollyOut(1.12); controls.update(); break;
       default: used = false;
     }
-    if (used) { e.preventDefault(); invalidate(); }
-  });
+    if (used) { e.preventDefault(); controls.update(); invalidate(); }
+  }
+  canvas.addEventListener('keydown', onKeyDown);
+
+  function dispose() {
+    if (disposed) return;
+    disposed = true;
+    cancelAnimationFrame(raf);
+    tweens = [];
+    resizeObserver.disconnect();
+    intersectionObserver.disconnect();
+    document.removeEventListener('visibilitychange', updateVisibility);
+    canvas.removeEventListener('keydown', onKeyDown);
+    controls.removeEventListener('change', invalidate);
+    controls.dispose();
+    room?.dispose();
+    scene.clear();
+    environmentTarget.dispose();
+    key.dispose();
+    composer.passes.forEach((pass) => pass.dispose());
+    composer.dispose();
+    renderer.dispose();
+  }
 
   return {
     renderer, scene, camera, controls,
     setRoom(r) {
-      if (room) scene.remove(room.root);
+      if (room === r) return;
+      if (room) { scene.remove(room.root); room.dispose(); }
       room = r; scene.add(r.root);
       const { pos, target } = viewVectors(r.views.home);
       camera.position.copy(pos); controls.target.copy(target); controls.update();
-      invalidate();
+      refreshOutline();
+      invalidate({ shadows: true });
     },
-    flyTo, select, preview, pulse, setEvening, partAt, invalidate,
+    flyTo, select, preview, pulse, setEvening, partAt, invalidate, dispose,
     setAutoRotate(on) { autoRotate = on; controls.autoRotate = on; invalidate(); },
     get autoRotate() { return autoRotate; },
   };

@@ -6,6 +6,16 @@ import * as THREE from 'three';
 const cache = new Map();
 let maxAniso = 4;
 export function setAnisotropy(n) { maxAniso = Math.min(8, n || 4); }
+export function disposeTextures() {
+  const textures = new Set();
+  for (const value of cache.values()) {
+    for (const texture of value?.isTexture ? [value] : Object.values(value || {})) {
+      if (texture?.isTexture) textures.add(texture);
+    }
+  }
+  textures.forEach((texture) => texture.dispose());
+  cache.clear();
+}
 
 function memo(key, make) {
   if (!cache.has(key)) cache.set(key, make());

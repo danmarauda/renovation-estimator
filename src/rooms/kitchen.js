@@ -540,6 +540,11 @@ export function buildKitchen() {
   }
 
   // ---------------------------------------------------------------- day and evening (t: 0 = day, 1 = evening)
+  const skyColours = [
+    [M.skySide, new THREE.Color('#CFE2EE'), new THREE.Color('#1A2540')],
+    [M.skyTop, new THREE.Color('#9CC1E2'), new THREE.Color('#0A1122')],
+    [M.skyLow, new THREE.Color('#8DB17C'), new THREE.Color('#0E1622')],
+  ];
   function applyNight() {
     const t = state.night;
     M.bulb.emissiveIntensity = t * 8;
@@ -551,8 +556,7 @@ export function buildKitchen() {
     rectLights.forEach((l) => { l.intensity = state.led ? t * 7 : 0; });
     const nightSky = t > 0.5;
     if (M.sky.map !== TX.skyTex(nightSky)) { M.sky.map = TX.skyTex(nightSky); M.sky.needsUpdate = true; }
-    const lerp = (a, b) => new THREE.Color(a).lerp(new THREE.Color(b), t);
-    M.skySide.color.copy(lerp('#CFE2EE', '#1A2540')); M.skyTop.color.copy(lerp('#9CC1E2', '#0A1122')); M.skyLow.color.copy(lerp('#8DB17C', '#0E1622'));
+    skyColours.forEach(([material, day, night]) => material.color.copy(day).lerp(night, t));
   }
   function setNight(t) { state.night = t; applyNight(); }
 
@@ -570,5 +574,16 @@ export function buildKitchen() {
     walls: { pos: [3.0, 2.1, 4.2], target: [-0.6, 1.5, -1.2] },
   };
 
-  return { root, partObjects, applyLooks, setNight, views };
+  function dispose() {
+    const geometries = new Set();
+    root.traverse((object) => {
+      if (object.geometry) geometries.add(object.geometry);
+      if (object.isLight) object.dispose();
+    });
+    geometries.forEach((geometry) => geometry.dispose());
+    Object.values(M).forEach((material) => material.dispose());
+    root.clear();
+  }
+
+  return { root, partObjects, applyLooks, setNight, views, dispose };
 }

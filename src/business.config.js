@@ -2,45 +2,43 @@
    BUSINESS CONFIG: the only file you edit to re-skin this estimator for a client.
 
    Change the business block (name, logo letters, phone, brand colour), then the prices.
-   Every option has:  name, price [low, high] in US dollars (installed), a swatch (any CSS colour or
-   gradient) or an icon, and a "look" that tells the 3D kitchen how to draw it.
-   Price ranges are for a mid-size US kitchen (about 150 sq ft) at mid-range quality. The "Kitchen size"
-   control multiplies every part marked scales: true.
+   Every option has: name, a provisional price [low, high] in AUD, a swatch or icon,
+   and a "look" that tells the 3D kitchen how to draw it.
+   These existing figures are planning allowances, NOT validated Australian supplier rates or an FX conversion.
+   Replace them with approved Incredible Kitchens prices before using this estimator for customer quotes.
+   The "Kitchen size" control scales allowances only; it does not resize the illustrative 3D room.
 
-   The consultation form is NOT connected to anything yet: it shows a thank-you and sends nothing.
-   (consultation.sendTo stays null until a backend or a form service is added.)
+   Online consultation bookings are unavailable until a real delivery service is implemented.
    ===================================================================================================== */
 
 export default {
   business: {
-    name: 'Cedar & Stone Renovations',
-    logoText: 'CS',                       // 1-3 letters shown in the round logo mark
-    tagline: 'Kitchens, baths and whole-home remodels',
-    phone: '(555) 010-2030',              // shown on the page and used for the tap-to-call link
-    brandColor: '#2F5E4E',                // one colour: logo, the button's dot, selection glow, focus rings
-    sampleNotice: 'Sample business for demonstration.',   // set to '' for a real client
+    name: 'Incredible Kitchens',
+    logoText: 'IK',
+    domain: 'incrediblekitchens.com.au',
+    tagline: 'Your kitchen. Made incredible.',
+    phone: null,
+    brandColor: '#2F5E4E',
+    sampleNotice: 'Provisional AUD allowances. Not yet validated against Incredible Kitchens pricing.',
   },
 
   estimate: {
-    label: 'Live estimate',
-    disclaimer: 'A ballpark estimate, not a quote. Your final price is confirmed after a free in-home visit.',
-    locale: 'en-US',
-    currency: 'USD',
+    label: 'Planning estimate · AUD',
+    disclaimer: 'Indicative AUD allowances, not a quote. GST treatment and final pricing must be confirmed with Incredible Kitchens.',
+    locale: 'en-AU',
+    currency: 'AUD',
     roundTo: 100,
   },
 
   cta: {
     lead: 'Love this design?',
-    button: 'Book a design consultation',
+    button: 'Discuss this design',
   },
 
   consultation: {
-    sendTo: null,   // NOT CONNECTED YET. Nothing is sent or emailed; the form only shows the thank-you.
-    title: 'Book a design consultation',
-    intro: 'Leave your details and a designer will call to set up a free visit. They will bring this design and estimate with them.',
-    bestTimes: ['Morning', 'Afternoon', 'Evening', 'Weekend'],
-    thankYouTitle: 'Thank you.',
-    thankYouText: '{business} will call you at {phone}, usually within one business day.',
+    title: 'Your design consultation',
+    intro: 'Keep exploring your kitchen and its planning estimate. Online consultation bookings are not available yet.',
+    unavailableMessage: 'No request has been sent. Online bookings need to be connected before we can collect your details or arrange a consultation.',
   },
 
   defaultRoom: 'kitchen',
@@ -54,12 +52,19 @@ export default {
       titleEm: 'new kitchen',
       intro: 'Click anything in the kitchen, or pick a part below. The estimate updates as you choose.',
       sizes: [
-        { id: 'small', name: 'Small', note: 'about 100 sq ft', factor: 0.8 },
-        { id: 'medium', name: 'Medium', note: 'about 150 sq ft', factor: 1 },
-        { id: 'large', name: 'Large', note: 'about 225 sq ft', factor: 1.35 },
+        { id: 'small', name: 'Small', note: 'approx. 10 m²', areaM2: 10, factor: 0.8 },
+        { id: 'medium', name: 'Medium', note: 'approx. 14 m²', areaM2: 14, factor: 1 },
+        { id: 'large', name: 'Large', note: 'approx. 21 m²', areaM2: 21, factor: 1.35 },
       ],
       defaultSize: 'medium',
-      base: { name: 'Demolition, plumbing, electrical and permits', price: [9500, 15500], scales: true },
+      sizeNote: 'Size adjusts the allowance only, not the illustrative 3D layout.',
+      measurementNote: 'Illustrative dimensions only. Confirm measurements and appliance clearances on site.',
+      measurements: [
+        { name: 'Benchtop height', value: 920 },
+        { name: 'Benchtop depth', value: 625 },
+        { name: 'Ceiling height', value: 2600 },
+      ],
+      base: { name: 'Demolition, plumbing, electrical and approvals', price: [9500, 15500], scales: true },
 
       parts: [
         {
@@ -83,16 +88,16 @@ export default {
           ],
         },
         {
-          id: 'countertops', name: 'Countertops', icon: 'countertops', scales: true,
+          id: 'countertops', name: 'Benchtops', icon: 'countertops', scales: true,
           note: 'Perimeter and island tops, templated and installed',
           groups: [
             { id: 'material', name: 'Material', options: [
               { id: 'butcher', name: 'Butcher block', swatch: 'repeating-linear-gradient(90deg,#C08B57 0 9px,#A87444 9px 11px,#C9965F 11px 20px)', price: [2400, 4200], look: { kind: 'wood', base: '#BE8A57', grain: '#8A5A32', gloss: 0.25 } },
-              { id: 'quartz', name: 'White quartz', swatch: 'radial-gradient(circle at 30% 30%,#FFFFFF,#ECEAE6 70%)', price: [3800, 6500], look: { kind: 'speckle', base: '#F1F0EC', flecks: ['#D9D6D0', '#C9C6C0', '#FFFFFF'], gloss: 0.6 } },
+              { id: 'porcelain', name: 'White porcelain', swatch: 'radial-gradient(circle at 30% 30%,#FFFFFF,#ECEAE6 70%)', price: [3800, 6500], look: { kind: 'speckle', base: '#F1F0EC', flecks: ['#D9D6D0', '#C9C6C0', '#FFFFFF'], gloss: 0.6 } },
               { id: 'granite', name: 'Granite', swatch: 'radial-gradient(circle at 30% 30%,#6E6A66,#2E2C2B 75%)', price: [3200, 5800], look: { kind: 'speckle', base: '#3A3735', flecks: ['#77716B', '#1E1C1B', '#A39B91', '#5B524A'], gloss: 0.8 } },
               { id: 'marble', name: 'Carrara marble', swatch: 'linear-gradient(135deg,#F4F2EE 0%,#E9E7E2 38%,#A9ADB2 41%,#EEECE7 45%,#E2E0DB 100%)', price: [5600, 9800], look: { kind: 'marble', base: '#F2F0EB', vein: '#8E9399', gloss: 0.7 } },
               { id: 'quartzite', name: 'Quartzite', swatch: 'linear-gradient(135deg,#F3EEE6 0%,#E6DCCB 40%,#B9A385 43%,#EFE8DC 48%,#E2D7C4 100%)', price: [6200, 10800], look: { kind: 'marble', base: '#EFE8DC', vein: '#AE9677', gloss: 0.75 } },
-            ], default: 'quartz' },
+            ], default: 'porcelain' },
             { id: 'edge', name: 'Island edge', options: [
               { id: 'eased', name: 'Eased edge', icon: 'edge-eased', price: [0, 0], look: { waterfall: false } },
               { id: 'waterfall', name: 'Waterfall sides', icon: 'edge-waterfall', price: [1400, 2600], look: { waterfall: true } },
@@ -100,14 +105,14 @@ export default {
           ],
         },
         {
-          id: 'backsplash', name: 'Backsplash', icon: 'backsplash', scales: true,
-          note: 'Tile or slab between the counters and upper cabinets',
+          id: 'backsplash', name: 'Splashback', icon: 'backsplash', scales: true,
+          note: 'Tile or slab between the benchtops and overhead cupboards',
           groups: [
             { id: 'tile', name: 'Tile', options: [
               { id: 'subway', name: 'White subway', swatch: 'linear-gradient(#F4F3EF 0 44%,#CFCBC4 44% 50%,#F4F3EF 50% 94%,#CFCBC4 94%)', price: [1000, 1800], look: { pattern: 'subway', base: '#F3F2EE', grout: '#C9C5BE' } },
               { id: 'zellige', name: 'Handmade zellige', swatch: 'conic-gradient(#D7E1DA 0 25%,#C4D2C8 0 50%,#DCE5DF 0 75%,#BFCEC4 0)', price: [2200, 3800], look: { pattern: 'zellige', base: '#CFDCD3', grout: '#E9ECE6' } },
               { id: 'herringbone', name: 'Marble herringbone', swatch: 'repeating-linear-gradient(45deg,#EEECE8 0 6px,#D3D2CF 6px 7px,#F4F2EF 7px 13px)', price: [2600, 4400], look: { pattern: 'herringbone', base: '#ECEAE5', vein: '#A3A6AA', grout: '#D8D5CF' } },
-              { id: 'slab', name: 'Quartz slab', swatch: 'radial-gradient(circle at 30% 30%,#FFFFFF,#ECEAE6 70%)', price: [2900, 5400], look: { pattern: 'slab', base: '#F1F0EC' } },
+              { id: 'slab', name: 'Porcelain slab', swatch: 'radial-gradient(circle at 30% 30%,#FFFFFF,#ECEAE6 70%)', price: [2900, 5400], look: { pattern: 'slab', base: '#F1F0EC' } },
             ], default: 'subway' },
           ],
         },
@@ -160,7 +165,7 @@ export default {
         },
         {
           id: 'appliances', name: 'Appliances', icon: 'appliances', scales: false,
-          note: 'Fridge, range, hood and dishwasher, delivered and hooked up',
+          note: 'Fridge, cooker, rangehood and dishwasher, supplied and installed',
           groups: [
             { id: 'package', name: 'Appliance package', options: [
               { id: 'stainless', name: 'Stainless steel', swatch: 'linear-gradient(135deg,#E3E5E6,#A9ADB0 60%,#CDD0D2)', price: [5500, 9000], look: { finish: 'stainless', pro: false, panel: false } },
@@ -172,9 +177,9 @@ export default {
         },
         {
           id: 'hardware', name: 'Hardware', icon: 'hardware', scales: true,
-          note: 'Cabinet pulls and the kitchen faucet',
+          note: 'Cabinet handles and kitchen tapware',
           groups: [
-            { id: 'finish', name: 'Pulls and faucet finish', options: [
+            { id: 'finish', name: 'Handles and tapware finish', options: [
               { id: 'brass', name: 'Brushed brass', swatch: 'linear-gradient(135deg,#E8CF96,#B08A47 60%,#D8B977)', price: [550, 1000], look: { metal: '#C9A35B', roughness: 0.32 } },
               { id: 'black', name: 'Matte black', swatch: '#1C1C1D', price: [400, 750], look: { metal: '#1A1A1B', roughness: 0.6, dark: true } },
               { id: 'nickel', name: 'Polished nickel', swatch: 'linear-gradient(135deg,#F2F1EC,#B9B8B2 60%,#E1E0DA)', price: [500, 900], look: { metal: '#D8D5CB', roughness: 0.12 } },

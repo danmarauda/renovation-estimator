@@ -11,7 +11,7 @@ export function createPanel({ room, state, reducedMotion, on }) {
   // ---------------------------------------------------------------- size
   el.sizes.innerHTML = room.sizes.map((s) => `<button class="fg-pill" type="button" data-size="${esc(s.id)}" aria-pressed="false">${esc(s.name)}<small>${esc(s.note)}</small></button>`).join('');
   el.sizes.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-size]'); if (!b) return;
+    const b = e.target.closest('[data-size]'); if (!b || state.size === b.dataset.size) return;
     state.size = b.dataset.size; on.change(null);
   });
 
@@ -83,11 +83,10 @@ export function createPanel({ room, state, reducedMotion, on }) {
 
   // ---------------------------------------------------------------- the price, ticking
   let shown = null, raf = 0, deltaTimer = 0, liveTimer = 0;
-  const priceEls = () => ({ lo: document.querySelectorAll('[data-price="lo"]'), hi: document.querySelectorAll('[data-price="hi"]') });
+  const priceEls = { lo: document.querySelectorAll('[data-price="lo"]'), hi: document.querySelectorAll('[data-price="hi"]') };
   function paintPrice([lo, hi]) {
-    const p = priceEls();
-    p.lo.forEach((n) => { n.textContent = money(lo); });
-    p.hi.forEach((n) => { n.textContent = money(hi); });
+    priceEls.lo.forEach((n) => { n.textContent = money(lo); });
+    priceEls.hi.forEach((n) => { n.textContent = money(hi); });
   }
   function animatePrice(to) {
     cancelAnimationFrame(raf);
@@ -119,14 +118,18 @@ export function createPanel({ room, state, reducedMotion, on }) {
     el.bdSize.textContent = `${size.name}, ${size.note}`;
     renderOptions();
     renderBreakdown(t);
-    animatePrice(t.range);
+    if (!last || last[0] !== t.range[0] || last[1] !== t.range[1]) animatePrice(t.range);
     if (last) showDelta(Math.round(((t.range[0] - last[0]) + (t.range[1] - last[1])) / 2 / 100) * 100);
     if (changedPart) el.breakdown.querySelector(`[data-part="${changedPart}"]`)?.classList.add('flash');
     last = t.range;
     clearTimeout(liveTimer);
-    liveTimer = setTimeout(() => { el.live.textContent = `Estimate now ${money(t.range[0])} to ${money(t.range[1])}.`; }, 500);
+    liveTimer = setTimeout(() => { el.live.textContent = `Planning estimate now ${money(t.range[0])} to ${money(t.range[1])} Australian dollars. ${size.note}.`; }, 500);
     return t;
   }
 
-  return { update, get totals() { return totals(room, state.choices, state.size); } };
+  return {
+    update,
+    get totals() { return totals(room, state.choices, state.size); },
+    dispose() { cancelAnimationFrame(raf); clearTimeout(deltaTimer); clearTimeout(liveTimer); },
+  };
 }

@@ -2,6 +2,7 @@
 import cfg from './business.config.js';
 import { builders } from './rooms/index.js';
 import { createStage } from './engine/stage.js';
+import { disposeTextures } from './engine/textures.js';
 import { injectSprite } from './ui/icons.js';
 import { defaultChoices, optionOf, setFormat, setRounding } from './ui/estimate.js';
 import { createPanel } from './ui/panel.js';
@@ -24,17 +25,28 @@ function onColor(hex) {
 const rootStyle = document.documentElement.style;
 rootStyle.setProperty('--brand', cfg.business.brandColor);
 rootStyle.setProperty('--on-brand', onColor(cfg.business.brandColor));
-document.title = `${room.name} estimator · ${cfg.business.name}`;
+document.title = `3D ${room.name} Estimator | ${cfg.business.name} Australia`;
 const text = {
   name: cfg.business.name, logoText: cfg.business.logoText, tagline: cfg.business.tagline, phone: cfg.business.phone,
   sampleNotice: cfg.business.sampleNotice, estimateLabel: cfg.estimate.label, disclaimer: cfg.estimate.disclaimer,
   ctaLead: cfg.cta.lead, ctaButton: cfg.cta.button, title: room.title, titleEm: room.titleEm, intro: room.intro,
-  consultTitle: cfg.consultation.title, consultIntro: cfg.consultation.intro, thankYouTitle: cfg.consultation.thankYouTitle,
+  consultTitle: cfg.consultation.title, consultIntro: cfg.consultation.intro,
+  consultUnavailable: cfg.consultation.unavailableMessage, sizeNote: room.sizeNote, measurementNote: room.measurementNote,
 };
 document.querySelectorAll('[data-bind]').forEach((n) => { n.textContent = text[n.dataset.bind] ?? ''; });
 const call = document.getElementById('callLink');
-call.href = `tel:${cfg.business.phone.replace(/[^\d+]/g, '').replace(/^(\d{10})$/, '+1$1')}`;
-call.setAttribute('aria-label', `Call ${cfg.business.name} at ${cfg.business.phone}`);
+call.hidden = !cfg.business.phone;
+if (cfg.business.phone) {
+  call.href = `tel:${cfg.business.phone.replace(/[^\d+]/g, '').replace(/^0/, '+61')}`;
+  call.setAttribute('aria-label', `Call ${cfg.business.name} at ${cfg.business.phone}`);
+}
+const measurements = document.getElementById('measurements');
+for (const measurement of room.measurements) {
+  const term = document.createElement('dt'), value = document.createElement('dd');
+  term.textContent = measurement.name;
+  value.textContent = `${new Intl.NumberFormat('en-AU', { useGrouping: false }).format(measurement.value)} mm`;
+  measurements.append(term, value);
+}
 
 // ------------------------------------------------------------------ state
 const state = { size: room.defaultSize, choices: defaultChoices(room), active: room.parts[0].id };
@@ -57,6 +69,7 @@ if (stage) {
 } else {
   canvas.hidden = true;
   document.getElementById('fallback').hidden = false;
+  document.querySelectorAll('.stage-tools button').forEach((button) => { button.disabled = true; });
 }
 
 // ------------------------------------------------------------------ panel
@@ -66,7 +79,12 @@ const panel = createPanel({
   on: {
     change(partId) {
       panel.update(partId);
-      if (kitchen) { kitchen.applyLooks(looks()); stage.invalidate(); if (partId) { stage.select(partId); stage.pulse(); } }
+      if (kitchen && partId) {
+        kitchen.applyLooks(looks());
+        stage.invalidate({ shadows: ['cabinets', 'countertops', 'island', 'lighting', 'appliances'].includes(partId) });
+        stage.select(partId);
+        stage.pulse();
+      }
     },
     selectPart(id, from) { selectPart(id, from); },
     previewPart(id) { stage && stage.preview(id); },
@@ -135,7 +153,7 @@ if (stage) {
 }
 
 // ------------------------------------------------------------------ consultation + the call-to-action button
-const consult = createConsult({ cfg, getTotals: () => panel.totals });
+const consult = createConsult({ getTotals: () => panel.totals });
 document.querySelectorAll('[data-open-consult]').forEach((btn) => {
   btn.addEventListener('click', () => consult.open(btn));
   if (coarse || reducedMotion) return;           // phones get the press only; no magnet, no light
@@ -147,3 +165,12 @@ document.querySelectorAll('[data-open-consult]').forEach((btn) => {
   });
   btn.addEventListener('pointerleave', () => { btn.style.translate = '0 0'; });
 });
+
+function dispose() {
+  stage?.dispose();
+  panel.dispose();
+  consult.dispose();
+  disposeTextures();
+}
+window.addEventListener('pagehide', (event) => { if (!event.persisted) dispose(); });
+if (import.meta.hot) import.meta.hot.dispose(dispose);

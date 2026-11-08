@@ -1,11 +1,19 @@
 <!doctype html>
-<html lang="en" data-palette="emerald">
+<html lang="en-AU" data-palette="emerald">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
-  <title>Kitchen Estimator</title>
-  <meta name="description" content="Design your new kitchen in 3D and see a live price range before you call.">
+  <meta name="theme-color" content="#2F5E4E">
+  <title>3D Kitchen Estimator | Incredible Kitchens Australia</title>
+  <meta name="description" content="Explore your Incredible Kitchens design in 3D, compare finishes and plan with metric measurements and indicative AUD allowances.">
+  <link rel="canonical" href="https://incrediblekitchens.com.au/">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="en_AU">
+  <meta property="og:site_name" content="Incredible Kitchens">
+  <meta property="og:title" content="3D Kitchen Estimator | Incredible Kitchens Australia">
+  <meta property="og:description" content="Your kitchen. Made incredible. Explore finishes in 3D with metric measurements and indicative AUD allowances.">
+  <meta property="og:url" content="https://incrediblekitchens.com.au/">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect x=%226%22 y=%224%22 width=%2220%22 height=%2224%22 rx=%223%22 fill=%22%232F5E4E%22/%3E%3Cpath d=%22M16 4v24%22 stroke=%22white%22 stroke-width=%222%22/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -17,7 +25,7 @@
   <link rel="stylesheet" href="/src/styles/panel.css">
 </head>
 <body class="ws">
-  <div class="app">
+  <main class="app">
     <section class="stage" id="stage" aria-label="3D kitchen">
       <canvas id="scene" tabindex="0" aria-label="3D kitchen. Drag, or use the arrow keys, to look around. Choose parts with the buttons beside it."></canvas>
       <p class="stage-fallback" id="fallback" hidden>The 3D view needs a newer browser. You can still choose every option and see the estimate.</p>
@@ -63,7 +71,13 @@
 
       <section class="block" aria-labelledby="sizeLabel">
         <h2 class="ws-eyebrow" id="sizeLabel">Kitchen size</h2>
-        <div class="ws-seg size-seg" id="sizes" role="group" aria-labelledby="sizeLabel"></div>
+        <div class="ws-seg size-seg" id="sizes" role="group" aria-labelledby="sizeLabel" aria-describedby="sizeNote"></div>
+        <p class="ws-cap" id="sizeNote" data-bind="sizeNote"></p>
+        <details class="measurements">
+          <summary class="ws-label">3D layout dimensions · mm</summary>
+          <dl id="measurements"></dl>
+          <p class="ws-cap" data-bind="measurementNote"></p>
+        </details>
       </section>
 
       <section class="block" aria-labelledby="partsLabel">
@@ -85,7 +99,7 @@
 
       <footer class="foot ws-cap">
         <p data-bind="sampleNotice"></p>
-        <p>Prices are estimates for planning, shown as installed ranges.</p>
+        <p>All allowances are in Australian dollars (AUD). Final scope, GST treatment and pricing require confirmation.</p>
       </footer>
     </aside>
 
@@ -96,31 +110,18 @@
       </div>
       <button class="cta" type="button" data-open-consult><span class="cta-label" data-bind="ctaButton"></span><span class="cta-dot" aria-hidden="true"><svg class="i"><use href="#i-arrow"/></svg></span></button>
     </div>
-  </div>
+  </main>
 
   <dialog class="fg ws-sheet consult" id="consult" aria-labelledby="consultTitle">
     <div class="grab" aria-hidden="true"></div>
     <button class="ws-icon close" type="button" data-close aria-label="Close"><svg class="i"><use href="#i-close"/></svg></button>
-    <form id="consultForm" novalidate>
+    <div class="consult-content">
       <h2 class="ws-display" id="consultTitle" data-bind="consultTitle"></h2>
       <p class="ws-label" data-bind="consultIntro"></p>
-      <div class="sheet-est ws-well"><span class="ws-cap">Your design</span><strong id="sheetPrice"></strong></div>
-      <div class="ws-field"><label for="fName">Name</label><input id="fName" name="name" class="ws-input" autocomplete="name" required></div>
-      <div class="ws-field"><label for="fPhone">Phone</label><input id="fPhone" name="phone" class="ws-input" type="tel" autocomplete="tel" inputmode="tel" required></div>
-      <div class="ws-field"><label for="fEmail">Email</label><input id="fEmail" name="email" class="ws-input" type="email" autocomplete="email" inputmode="email" required></div>
-      <fieldset class="ws-field times"><legend>Best time to call</legend><div class="ws-seg" id="times"></div></fieldset>
-      <p class="form-error ws-cap" id="formError" role="alert"></p>
-      <div class="sheet-actions">
-        <button class="ws-btn dark big" type="submit">Request my consultation</button>
-        <button class="ws-btn ghost big" type="button" data-close>Cancel</button>
-      </div>
-    </form>
-    <div class="thanks" id="thanks" hidden>
-      <span class="halo" aria-hidden="true"></span>
-      <h2 class="ws-loud m" data-bind="thankYouTitle"></h2>
-      <p class="ws-lead" id="thanksText"></p>
-      <div class="sheet-est ws-well"><span class="ws-cap">Your estimate</span><strong id="thanksPrice"></strong></div>
-      <button class="ws-btn quiet big" type="button" data-close>Back to my design</button>
+      <div class="sheet-est ws-well"><span class="ws-cap">Your planning estimate · AUD</span><strong id="sheetPrice"></strong></div>
+      <p class="ws-cap" data-bind="disclaimer"></p>
+      <p class="ws-label" data-bind="consultUnavailable"></p>
+      <button class="ws-btn dark big" type="button" data-close>Back to my design</button>
     </div>
   </dialog>
 
