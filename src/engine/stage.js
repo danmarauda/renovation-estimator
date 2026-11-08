@@ -9,11 +9,13 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { OutlinePass } from 'three/addons/postprocessing/OutlinePass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { setAnisotropy } from './textures.js';
+import { createTransitions } from './transitions.js';
+import { createPartPicker } from './picking.js';
 
 const easeInOut = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
 const lerp = (a, b, t) => a + (b - a) * t;
 
-export function createStage({ canvas, host, reducedMotion, brandColor, coarse }) {
+export function createStage({ canvas, host, reducedMotion, brandColor, coarse, onAvailabilityChange = () => {} }) {
   let renderer;
   try {
     renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: true, powerPreference: 'high-performance' });
@@ -32,13 +34,19 @@ export function createStage({ canvas, host, reducedMotion, brandColor, coarse })
   RectAreaLightUniformsLib.init();
 
   const scene = new THREE.Scene();
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  const environment = new RoomEnvironment();
-  const environmentTarget = pmrem.fromScene(environment, 0.04);
+  function createEnvironment() {
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const environment = new RoomEnvironment();
+    try {
+      return pmrem.fromScene(environment, 0.04);
+    } finally {
+      environment.dispose();
+      pmrem.dispose();
+    }
+  }
+  let environmentTarget = createEnvironment();
   scene.environment = environmentTarget.texture;
   scene.environmentIntensity = 0.95;
-  environment.dispose();
-  pmrem.dispose();
 
   const camera = new THREE.PerspectiveCamera(38, 1, 0.05, 80);
   const key = new THREE.DirectionalLight(0xFFF3E6, 2.4);
@@ -76,10 +84,10 @@ export function createStage({ canvas, host, reducedMotion, brandColor, coarse })
   composer.addPass(outline);
   composer.addPass(new OutputPass());
 
-  let room = null, needs = true, tweens = [], fit = 1, nightT = 0, selected = null, previewing = null;
-  let raf = 0, disposed = false, inView = true, lastFrame = null;
+  let room = null, pickPart = null, needs = true, fit = 1, nightT = 0, selected = null, previewing = null;
+  let raf = 0, disposed = false, contextLost = false, inView = true, lastFrame = null;
   function schedule() {
-    if (!raf && !disposed && !document.hidden && inView) raf = requestAnimationFrame(loop);
+    if (!raf && !disposed && !contextLost && !document.hidden && inView) raf = requestAnimationFrame(loop);
   }
   function invalidate({ shadows = false } = {}) {
     needs = true;
@@ -125,15 +133,9 @@ export function createStage({ canvas, host, reducedMotion, brandColor, coarse })
   document.addEventListener('visibilitychange', updateVisibility);
 
   // ---------------------------------------------------------------- tweens
-  function tween(dur, step, done) {
-    if (reducedMotion || dur <= 0) { step(1); done && done(); invalidate(); return; }
-    const tw = { t0: performance.now(), dur, step, done };
-    tweens.push(tw);
-    invalidate();
-    return tw;
-  }
-  let fly = null;
-  controls.addEventListener('start', () => { if (fly) { tweens = tweens.filter((t) => t !== fly); fly = null; } });
+  const transitions = createTransitions({ reducedMotion, invalidate });
+  function cancelCameraMove() { transitions.cancel('camera'); }
+  controls.addEventListener('start', cancelCameraMove);
 
   function viewVectors(v) {
     const target = new THREE.Vector3(...v.target);
@@ -146,43 +148,34 @@ export function createStage({ canvas, host, reducedMotion, brandColor, coarse })
     // travel on a gentle arc: interpolate around the target, not through the room
     const s0 = new THREE.Spherical().setFromVector3(p0.clone().sub(t0));
     const s1 = new THREE.Spherical().setFromVector3(pos.clone().sub(target));
-    if (fly) tweens = tweens.filter((t) => t !== fly);
     const tg = new THREE.Vector3(), offset = new THREE.Vector3(), s = new THREE.Spherical();
-    fly = tween(dur, (k) => {
+    transitions.start('camera', dur, (k) => {
       const e = easeInOut(k);
       tg.copy(t0).lerp(target, e);
       s.set(lerp(s0.radius, s1.radius, e), lerp(s0.phi, s1.phi, e), lerp(s0.theta, s1.theta, e));
       camera.position.copy(tg).add(offset.setFromSpherical(s));
       controls.target.copy(tg);
       camera.lookAt(tg);
-    }, () => { fly = null; controls.update(); });
+    }, () => { controls.update(); });
   }
 
   // ---------------------------------------------------------------- loop
   let autoRotate = false;
   function loop(now) {
     raf = 0;
-    if (disposed || document.hidden || !inView) { lastFrame = null; return; }
+    if (disposed || contextLost || document.hidden || !inView) { lastFrame = null; return; }
     const delta = lastFrame === null ? 1 / 60 : Math.min((now - lastFrame) / 1000, 0.1);
     lastFrame = now;
-    if (tweens.length) {
-      tweens = tweens.filter((tw) => {
-        const k = Math.min(1, (now - tw.t0) / tw.dur);
-        tw.step(k);
-        if (k >= 1) { tw.done && tw.done(); return false; }
-        return true;
-      });
-      needs = true;
-    }
+    if (transitions.update(delta)) needs = true;
     if (autoRotate) {
       const az = controls.getAzimuthalAngle();
       if (az <= controls.minAzimuthAngle + 0.02) controls.autoRotateSpeed = -Math.abs(controls.autoRotateSpeed);
       if (az >= controls.maxAzimuthAngle - 0.02) controls.autoRotateSpeed = Math.abs(controls.autoRotateSpeed);
     }
-    const moving = !fly && controls.update(delta);
+    const moving = !transitions.has('camera') && controls.update(delta);
     if (moving) needs = true;
     if (needs) { needs = false; composer.render(delta); }
-    if (tweens.length || autoRotate || moving || needs) schedule();
+    if (transitions.size || autoRotate || moving || needs) schedule();
     else lastFrame = null;
   }
 
@@ -190,17 +183,13 @@ export function createStage({ canvas, host, reducedMotion, brandColor, coarse })
   const ray = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
   function partAt(clientX, clientY) {
-    if (!room) return null;
+    if (!room || contextLost || disposed) return null;
     const r = canvas.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
     ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+    camera.updateMatrixWorld();
     ray.setFromCamera(ndc, camera);
-    for (const hit of ray.intersectObject(room.root, true)) {
-      for (let o = hit.object; o; o = o.parent) {
-        if (!o.visible) break;
-        if (o.userData.part) return o.userData.part;
-      }
-    }
-    return null;
+    return pickPart(ray);
   }
 
   // ---------------------------------------------------------------- selection outline
@@ -214,16 +203,14 @@ export function createStage({ canvas, host, reducedMotion, brandColor, coarse })
   function preview(id) { previewing = id; refreshOutline(); }
   function pulse() {
     if (reducedMotion) return;
-    tween(700, (k) => { outline.edgeStrength = lerp(7, 3.2, k); outline.edgeGlow = lerp(1.2, 0.35, k); });
+    transitions.start('outline', 700, (k) => { outline.edgeStrength = lerp(7, 3.2, k); outline.edgeGlow = lerp(1.2, 0.35, k); });
   }
 
   // ---------------------------------------------------------------- day and evening
-  let eveningTween = null;
   function setEvening(on) {
     const from = nightT, to = on ? 1 : 0;
-    if (eveningTween) tweens = tweens.filter((item) => item !== eveningTween);
     host.classList.toggle('is-evening', on);
-    eveningTween = tween(900, (k) => {
+    transitions.start('lighting', 900, (k) => {
       const t = lerp(from, to, easeInOut(k));
       nightT = t;
       scene.environmentIntensity = lerp(0.95, 0.05, t);
@@ -236,6 +223,7 @@ export function createStage({ canvas, host, reducedMotion, brandColor, coarse })
 
   // ---------------------------------------------------------------- keyboard orbit on the canvas
   function onKeyDown(e) {
+    if (!controls.enabled) return;
     const step = 0.14;
     let used = true;
     switch (e.key) {
@@ -247,19 +235,47 @@ export function createStage({ canvas, host, reducedMotion, brandColor, coarse })
       case '-': case '_': controls.dollyOut(1.12); controls.update(); break;
       default: used = false;
     }
-    if (used) { e.preventDefault(); controls.update(); invalidate(); }
+    if (used) { cancelCameraMove(); e.preventDefault(); controls.update(); invalidate(); }
   }
   canvas.addEventListener('keydown', onKeyDown);
+
+  function onContextLost(event) {
+    event.preventDefault();
+    contextLost = true;
+    controls.enabled = false;
+    cancelAnimationFrame(raf);
+    raf = 0;
+    lastFrame = null;
+    onAvailabilityChange(false);
+  }
+  function onContextRestored() {
+    if (disposed) return;
+    // Render-target contents are lost with the context; the environment must be captured again.
+    environmentTarget.dispose();
+    environmentTarget = createEnvironment();
+    scene.environment = environmentTarget.texture;
+    contextLost = false;
+    controls.enabled = true;
+    onAvailabilityChange(true);
+    resize();
+    invalidate({ shadows: true });
+  }
+  canvas.addEventListener('webglcontextlost', onContextLost);
+  canvas.addEventListener('webglcontextrestored', onContextRestored);
 
   function dispose() {
     if (disposed) return;
     disposed = true;
     cancelAnimationFrame(raf);
-    tweens = [];
+    raf = 0;
+    transitions.clear();
     resizeObserver.disconnect();
     intersectionObserver.disconnect();
     document.removeEventListener('visibilitychange', updateVisibility);
     canvas.removeEventListener('keydown', onKeyDown);
+    canvas.removeEventListener('webglcontextlost', onContextLost);
+    canvas.removeEventListener('webglcontextrestored', onContextRestored);
+    controls.removeEventListener('start', cancelCameraMove);
     controls.removeEventListener('change', invalidate);
     controls.dispose();
     room?.dispose();
@@ -276,7 +292,11 @@ export function createStage({ canvas, host, reducedMotion, brandColor, coarse })
     setRoom(r) {
       if (room === r) return;
       if (room) { scene.remove(room.root); room.dispose(); }
-      room = r; scene.add(r.root);
+      transitions.cancel('camera');
+      room = r;
+      pickPart = createPartPicker(r.root, r.partObjects);
+      scene.add(r.root);
+      r.setNight(nightT);
       const { pos, target } = viewVectors(r.views.home);
       camera.position.copy(pos); controls.target.copy(target); controls.update();
       refreshOutline();

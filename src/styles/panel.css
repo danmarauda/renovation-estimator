@@ -1,6 +1,8 @@
 /* Kitchen estimator: the side panel, options, breakdown, the consultation sheet and the phone layout. */
 
-/* ================================================================ brand header */
+  .panel[aria-busy="true"] { visibility: hidden; }
+
+  /* ================================================================ brand header */
 .brand { display: flex; align-items: center; gap: var(--s3); }
 .logo { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--brand); color: var(--on-brand);
   font: 600 15px/1 var(--font); letter-spacing: .02em; box-shadow: var(--lift-1); }

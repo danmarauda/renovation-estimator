@@ -1,8 +1,5 @@
 // Wiring: config -> page text and brand, the 3D stage, the panel, the consultation sheet.
 import cfg from './business.config.js';
-import { builders } from './rooms/index.js';
-import { createStage } from './engine/stage.js';
-import { disposeTextures } from './engine/textures.js';
 import { injectSprite } from './ui/icons.js';
 import { defaultChoices, optionOf, setFormat, setRounding } from './ui/estimate.js';
 import { createPanel } from './ui/panel.js';
@@ -59,18 +56,15 @@ const looks = () => {
 // ------------------------------------------------------------------ 3D
 const stageEl = document.getElementById('stage');
 const canvas = document.getElementById('scene');
-const stage = createStage({ canvas, host: stageEl, reducedMotion, brandColor: cfg.business.brandColor, coarse });
-let kitchen = null;
-if (stage) {
-  kitchen = builders[roomId]();
-  kitchen.applyLooks(looks());
-  stage.setRoom(kitchen);
-  stage.select(state.active);
-} else {
-  canvas.hidden = true;
-  document.getElementById('fallback').hidden = false;
-  document.querySelectorAll('.stage-tools button').forEach((button) => { button.disabled = true; });
+let stage = null, kitchen = null, releaseTextures = null, disposed = false;
+function setSceneAvailability(available, message = 'The 3D view is reconnecting. Your design is unchanged, and you can keep choosing finishes and checking your estimate.') {
+  const fallback = document.getElementById('fallback');
+  fallback.hidden = available;
+  if (!available) fallback.textContent = message;
+  canvas.setAttribute('aria-busy', String(!available));
+  document.querySelectorAll('.stage-tools button').forEach((button) => { button.disabled = !available; });
 }
+setSceneAvailability(false, 'Loading your 3D kitchen. You can already choose finishes and check your estimate.');
 
 // ------------------------------------------------------------------ panel
 const isPhone = () => matchMedia('(max-width: 999px)').matches;
@@ -99,6 +93,7 @@ function selectPart(id, from) {
   hideHint();
 }
 panel.update(null);
+document.getElementById('panel').setAttribute('aria-busy', 'false');
 
 // ------------------------------------------------------------------ stage controls
 const hint = document.getElementById('hint');
@@ -119,37 +114,53 @@ rot.addEventListener('click', () => {
 document.getElementById('wholeView').addEventListener('click', () => { stage && stage.flyTo(kitchen.views.home); });
 
 // picking in 3D: a click (not a drag) selects the part under the pointer
-if (stage) {
-  let down = null;
-  canvas.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; hideHint(); });
+const pointerEvents = new AbortController();
+let pendingPick = 0;
+function setupPicking() {
+  let down = null, pointerX = 0, pointerY = 0;
+  const listener = { signal: pointerEvents.signal };
+  const tip = document.getElementById('tip');
+  function clearHover() {
+    cancelAnimationFrame(pendingPick);
+    pendingPick = 0;
+    tip.classList.remove('show');
+    canvas.classList.remove('is-pointing');
+  }
+  canvas.addEventListener('pointerdown', (e) => {
+    clearHover();
+    down = e.isPrimary ? { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() } : null;
+    hideHint();
+  }, listener);
   canvas.addEventListener('pointerup', (e) => {
-    if (!down) return;
+    if (!down || down.id !== e.pointerId) return;
     const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y), quick = performance.now() - down.t < 600;
     down = null;
     if (moved > 6 || !quick) return;
     const id = stage.partAt(e.clientX, e.clientY);
     if (id) selectPart(id, 'scene');
-  });
-  // hover label (mouse only)
-  const tip = document.getElementById('tip');
-  let pending = null;
+  }, listener);
+  // hover label (mouse only), sampled once per frame at the latest pointer position
   canvas.addEventListener('pointermove', (e) => {
-    if (e.pointerType !== 'mouse' || e.buttons) { tip.classList.remove('show'); return; }
-    if (pending) return;
-    pending = requestAnimationFrame(() => {
-      pending = null;
-      const id = stage.partAt(e.clientX, e.clientY);
+    if (e.pointerType !== 'mouse' || e.buttons) { clearHover(); return; }
+    pointerX = e.clientX; pointerY = e.clientY;
+    if (pendingPick) return;
+    pendingPick = requestAnimationFrame(() => {
+      pendingPick = 0;
+      const id = stage.partAt(pointerX, pointerY);
       canvas.classList.toggle('is-pointing', !!id);
       if (!id) { tip.classList.remove('show'); return; }
       const p = room.parts.find((x) => x.id === id);
       tip.innerHTML = `<b></b> · click to change`;
       tip.querySelector('b').textContent = p.name;
       const r = stageEl.getBoundingClientRect();
-      tip.style.transform = `translate(${Math.min(e.clientX - r.left + 14, r.width - tip.offsetWidth - 8)}px, ${e.clientY - r.top + 18}px)`;
+      tip.style.transform = `translate(${Math.max(8, Math.min(pointerX - r.left + 14, r.width - tip.offsetWidth - 8))}px, ${Math.min(pointerY - r.top + 18, r.height - tip.offsetHeight - 8)}px)`;
       tip.classList.add('show');
     });
-  });
-  canvas.addEventListener('pointerleave', () => { tip.classList.remove('show'); canvas.classList.remove('is-pointing'); });
+  }, listener);
+  function cancelPointer() { down = null; clearHover(); }
+  canvas.addEventListener('pointerleave', cancelPointer, listener);
+  canvas.addEventListener('pointercancel', cancelPointer, listener);
+  canvas.addEventListener('webglcontextlost', cancelPointer, listener);
 }
 
 // ------------------------------------------------------------------ consultation + the call-to-action button
@@ -166,11 +177,50 @@ document.querySelectorAll('[data-open-consult]').forEach((btn) => {
   btn.addEventListener('pointerleave', () => { btn.style.translate = '0 0'; });
 });
 
+async function initializeScene() {
+  try {
+    const [{ createStage }, { builders }, { disposeTextures }] = await Promise.all([
+      import('./engine/stage.js'), import('./rooms/index.js'), import('./engine/textures.js'),
+    ]);
+    if (disposed) return;
+    releaseTextures = disposeTextures;
+    stage = createStage({ canvas, host: stageEl, reducedMotion, brandColor: cfg.business.brandColor, coarse, onAvailabilityChange: setSceneAvailability });
+    if (!stage) throw new Error('WebGL is unavailable');
+    kitchen = builders[roomId]();
+    kitchen.applyLooks(looks());
+    stage.setRoom(kitchen);
+    stage.select(state.active);
+    setupPicking();
+    setSceneAvailability(true);
+  } catch (error) {
+    if (disposed) return;
+    pointerEvents.abort();
+    cancelAnimationFrame(pendingPick);
+    stage?.dispose();
+    kitchen?.dispose();
+    releaseTextures?.();
+    stage = null;
+    kitchen = null;
+    canvas.hidden = true;
+    setSceneAvailability(false, 'The 3D view could not load. You can still choose every option and see your estimate. Try reloading to restore the 3D view.');
+    canvas.setAttribute('aria-busy', 'false');
+    console.error('The 3D kitchen could not be initialized.', error);
+  }
+}
+let startupTimer = 0;
+const startupFrame = requestAnimationFrame(() => { startupTimer = setTimeout(initializeScene, 0); });
+
 function dispose() {
+  if (disposed) return;
+  disposed = true;
+  cancelAnimationFrame(startupFrame);
+  clearTimeout(startupTimer);
+  pointerEvents.abort();
+  cancelAnimationFrame(pendingPick);
   stage?.dispose();
   panel.dispose();
   consult.dispose();
-  disposeTextures();
+  releaseTextures?.();
 }
 window.addEventListener('pagehide', (event) => { if (!event.persisted) dispose(); });
 if (import.meta.hot) import.meta.hot.dispose(dispose);

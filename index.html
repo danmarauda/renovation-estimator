@@ -28,7 +28,7 @@
   <main class="app">
     <section class="stage" id="stage" aria-label="3D kitchen">
       <canvas id="scene" tabindex="0" aria-label="3D kitchen. Drag, or use the arrow keys, to look around. Choose parts with the buttons beside it."></canvas>
-      <p class="stage-fallback" id="fallback" hidden>The 3D view needs a newer browser. You can still choose every option and see the estimate.</p>
+      <p class="stage-fallback" id="fallback" role="status">Loading your 3D kitchen. You can already choose finishes and check your estimate.</p>
 
       <div class="estimate ws-card" id="estimate">
         <div class="est-head">
@@ -57,7 +57,7 @@
       <div class="tip" id="tip" aria-hidden="true"></div>
     </section>
 
-    <aside class="panel" id="panel">
+    <aside class="panel" id="panel" aria-busy="true">
       <header class="brand">
         <span class="logo" data-bind="logoText" aria-hidden="true"></span>
         <span class="brand-txt"><span class="brand-name" data-bind="name"></span><span class="ws-cap" data-bind="tagline"></span></span>

@@ -59,6 +59,7 @@ function bakeInto(container, tmp) {
   clear(container);
   tmp.updateMatrixWorld(true);
   const buckets = new Map();
+  const originals = new Set();
   tmp.traverse((o) => {
     if (!o.isMesh) return;
     const g = o.geometry.clone().applyMatrix4(o.matrixWorld);
@@ -66,11 +67,14 @@ function bakeInto(container, tmp) {
     for (const n of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(n)) g.deleteAttribute(n);
     if (!buckets.has(o.material)) buckets.set(o.material, []);
     buckets.get(o.material).push(g);
-    o.geometry.dispose();
+    originals.add(o.geometry);
   });
+  originals.forEach((geometry) => geometry.dispose());
   for (const [mat, geos] of buckets) {
     const merged = mergeGeometries(geos, false);
     geos.forEach((g) => g.dispose());
+    merged.computeBoundingBox();
+    merged.computeBoundingSphere();
     const m = new THREE.Mesh(merged, mat);
     m.castShadow = !mat.userData.noShadow; m.receiveShadow = true;
     container.add(m);
@@ -421,7 +425,7 @@ export function buildKitchen() {
   let pendantLights = [];
   function rebuildPendants(look) {
     const P = new THREE.Group();
-    lights.children.filter((l) => l.userData.pendant).forEach((l) => lights.remove(l));
+    for (const light of pendantLights) { lights.remove(light); light.dispose(); }
     pendantLights = [];
     const top = 2.6;
     M.rod.color.set(look.finish === 'black' ? '#1C1C1D' : '#C9A35B');
@@ -510,6 +514,7 @@ export function buildKitchen() {
     }
     if (changed('edge', ct.edge)) rebuildCounters(ct.edge.waterfall);
     if (changed('splash', bs.tile)) {
+      const hadMap = !!M.splash.map, hadBump = !!M.splash.bumpMap;
       const t = bs.tile;
       let set;
       if (t.pattern === 'subway') set = TX.subwayTiles(t);
@@ -518,16 +523,17 @@ export function buildKitchen() {
       else set = { map: TX.speckleTex({ base: t.base, flecks: ['#D9D6D0', '#C9C6C0', '#FFFFFF'] }, 0.9), bump: null };
       M.splash.map = set.map; M.splash.bumpMap = set.bump; M.splash.bumpScale = 1.6;
       M.splash.roughness = t.pattern === 'zellige' ? 0.18 : 0.28; M.splash.clearcoat = t.pattern === 'slab' ? 0.5 : 0.7; M.splash.clearcoatRoughness = 0.1;
-      M.splash.needsUpdate = true;
+      if (hadMap !== !!M.splash.map || hadBump !== !!M.splash.bumpMap) M.splash.needsUpdate = true;
     }
     if (changed('stools', isl.stools)) rebuildStools(isl.stools.stool);
     if (changed('pendant', li.pendant)) rebuildPendants(li.pendant);
     if (changed('led', li.under)) { state.led = li.under.underCabinet; G.leds.visible = state.led; applyNight(); }
     if (changed('floor', fl.floor)) {
+      const hadMap = !!M.floor.map;
       const f = fl.floor;
       M.floor.map = f.floor === 'planks' ? TX.plankFloor(f) : f.floor === 'tile' ? TX.stoneFloor(f) : TX.herringboneWood(f);
       M.floor.roughness = f.floor === 'tile' ? 0.42 : 0.55; M.floor.clearcoat = f.floor === 'tile' ? 0.2 : 0.15; M.floor.clearcoatRoughness = 0.5;
-      M.floor.needsUpdate = true;
+      if (!hadMap) M.floor.needsUpdate = true;
     }
     if (changed('appFinish', ap.package.finish)) {
       const black = ap.package.finish === 'black';
@@ -554,8 +560,7 @@ export function buildKitchen() {
     M.led.emissiveIntensity = state.led ? t * 5 : 0;
     pendantLights.forEach((l) => { l.intensity = t * 2.4; });
     rectLights.forEach((l) => { l.intensity = state.led ? t * 7 : 0; });
-    const nightSky = t > 0.5;
-    if (M.sky.map !== TX.skyTex(nightSky)) { M.sky.map = TX.skyTex(nightSky); M.sky.needsUpdate = true; }
+    M.sky.map = TX.skyTex(t > 0.5);
     skyColours.forEach(([material, day, night]) => material.color.copy(day).lerp(night, t));
   }
   function setNight(t) { state.night = t; applyNight(); }
@@ -574,7 +579,10 @@ export function buildKitchen() {
     walls: { pos: [3.0, 2.1, 4.2], target: [-0.6, 1.5, -1.2] },
   };
 
+  let disposed = false;
   function dispose() {
+    if (disposed) return;
+    disposed = true;
     const geometries = new Set();
     root.traverse((object) => {
       if (object.geometry) geometries.add(object.geometry);

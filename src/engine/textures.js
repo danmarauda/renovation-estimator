@@ -34,7 +34,7 @@ function toTex(c, metres, srgb = true) {
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.anisotropy = maxAniso;
-  if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+  t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
   t.repeat.set(1 / metres, 1 / metres);
   return t;
 }
@@ -152,7 +152,7 @@ export function marbleTex({ base, vein: vc }, metres = 1.6) {
 }
 
 export function speckleTex({ base, flecks }, metres = 0.9) {
-  return memo(`speckle:${base}:${flecks.join()}`, () => {
+  return memo(`speckle:${base}:${flecks.join()}:${metres}`, () => {
     const W = 1024, c = canvas(W), ctx = c.getContext('2d'), r = rng(hashSeed(base + flecks.join()));
     ctx.fillStyle = base; ctx.fillRect(0, 0, W, W);
     const dark = hexRgb(base).reduce((a, b) => a + b) < 384;
@@ -230,7 +230,7 @@ function herringbone(S, n, brick) {
 }
 
 export function herringboneMarble({ base, vein: vc, grout }) {
-  return tileSet(`hbm:${base}:${vc}`, 0.3, 960, (ctx, bctx, S) => {
+  return tileSet(`hbm:${base}:${vc}:${grout}`, 0.3, 960, (ctx, bctx, S) => {
     ctx.fillStyle = grout; ctx.fillRect(0, 0, S, S); bctx.fillStyle = '#000'; bctx.fillRect(0, 0, S, S);
     const gw = 4;
     herringbone(S, 3, (x, y, w, h, along, seed) => {
@@ -307,7 +307,7 @@ export function plankFloor({ base, grain, plank = 0.19 }) {
 }
 
 export function stoneFloor({ base, vein: vc, grout }) {
-  return memo(`stonefloor:${base}:${vc}`, () => {
+  return memo(`stonefloor:${base}:${vc}:${grout}`, () => {
     const S = 1024, c = canvas(S), ctx = c.getContext('2d'), half = S / 2, gw = 4;
     ctx.fillStyle = grout; ctx.fillRect(0, 0, S, S);
     for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
