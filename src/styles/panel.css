@@ -118,12 +118,14 @@ button.bd-row:active { transform: scale(.985); }
   .dock-rule { margin: 10px 2px; }
 
   /* the estimate bar on a phone: the price, the "not a quote" line, then the one action. The size is the first step in the dock. */
-  .panel { display: block; padding-bottom: calc(164px + env(safe-area-inset-bottom)); }
+  .panel { display: block; padding-bottom: calc(180px + env(safe-area-inset-bottom)); }
   .panel-body { overflow: visible; padding: var(--s4) var(--s4) var(--s5); -webkit-mask-image: none; mask-image: none; scroll-margin-top: calc(var(--stage-h) + 80px); }
   .stepper { padding: 0 var(--s4); }
   .panel-foot { position: fixed; left: 8px; right: 8px; bottom: max(8px, env(safe-area-inset-bottom)); z-index: 20; margin: 0; padding: 10px 12px 12px; gap: 4px;
     background: color-mix(in srgb, var(--st-3) 92%, transparent); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); }
-  .est-head { display: none; }
+  /* the label stays for screen readers; the size button goes, because the dock's Size step does the same job */
+  .est-head { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .est-head .chip-btn { display: none; }
   .est-row, .est-note { padding: 0 6px; }
   .est-row { min-height: 44px; }
   .text-btn { min-height: 44px; }
