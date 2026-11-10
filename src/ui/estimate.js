@@ -62,9 +62,9 @@ export function roundRange([lo, hi]) {
   return [Math.floor(lo / ROUND) * ROUND, Math.ceil(hi / ROUND) * ROUND];
 }
 
-let FMT = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+let FMT = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD', maximumFractionDigits: 0 });
 export function setFormat(locale, currency) {
-  FMT = new Intl.NumberFormat(locale || 'en-US', { style: 'currency', currency: currency || 'USD', maximumFractionDigits: 0 });
+  FMT = new Intl.NumberFormat(locale || 'en-AU', { style: 'currency', currency: currency || 'AUD', maximumFractionDigits: 0 });
 }
 export const money = (n) => FMT.format(Math.round(n));
 export const moneyRange = ([lo, hi]) => `${money(lo)} – ${money(hi)}`;

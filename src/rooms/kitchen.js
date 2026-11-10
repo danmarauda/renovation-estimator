@@ -47,9 +47,14 @@ function makeMaterials() {
     skyTop: new THREE.MeshBasicMaterial({ color: '#9CC1E2', side: THREE.BackSide, toneMapped: false }),
     skyLow: new THREE.MeshBasicMaterial({ color: '#8DB17C', side: THREE.BackSide, toneMapped: false }),
     none: new THREE.MeshBasicMaterial({ visible: false }),
-    catcher: new THREE.ShadowMaterial({ opacity: 0.16 }),
+    catcher: new THREE.ShadowMaterial({ opacity: 0.22 }),
+    contact: new THREE.MeshBasicMaterial({ map: TX.contactTex(), color: '#000000', transparent: true, opacity: 0.34, depthWrite: false }),
+    // window glass: clear, with a reflection of the room rather than a tint
+    pane: phys({ color: '#FFFFFF', roughness: 0.02, transparent: true, opacity: 0.16, envMapIntensity: 1.6, depthWrite: false }),
+    skyNight: new THREE.MeshBasicMaterial({ map: TX.skyTex(true), transparent: true, opacity: 0, depthWrite: false, toneMapped: false }),
+    halo: new THREE.SpriteMaterial({ map: TX.glowTex(), color: WARM, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }),
   };
-  for (const k of ['glass', 'led', 'bulb', 'sky', 'skySide', 'skyTop', 'skyLow', 'none']) M[k].userData.noShadow = true;
+  for (const k of ['glass', 'led', 'bulb', 'sky', 'skySide', 'skyTop', 'skyLow', 'none', 'pane', 'skyNight']) M[k].userData.noShadow = true;
   return M;
 }
 
@@ -59,6 +64,7 @@ function bakeInto(container, tmp) {
   clear(container);
   tmp.updateMatrixWorld(true);
   const buckets = new Map();
+  const originals = new Set();
   tmp.traverse((o) => {
     if (!o.isMesh) return;
     const g = o.geometry.clone().applyMatrix4(o.matrixWorld);
@@ -66,11 +72,14 @@ function bakeInto(container, tmp) {
     for (const n of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(n)) g.deleteAttribute(n);
     if (!buckets.has(o.material)) buckets.set(o.material, []);
     buckets.get(o.material).push(g);
-    o.geometry.dispose();
+    originals.add(o.geometry);
   });
+  originals.forEach((geometry) => geometry.dispose());
   for (const [mat, geos] of buckets) {
     const merged = mergeGeometries(geos, false);
     geos.forEach((g) => g.dispose());
+    merged.computeBoundingBox();
+    merged.computeBoundingSphere();
     const m = new THREE.Mesh(merged, mat);
     m.castShadow = !mat.userData.noShadow; m.receiveShadow = true;
     container.add(m);
@@ -198,6 +207,10 @@ export function buildKitchen() {
   const catcher = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), M.catcher);
   catcher.rotation.x = -Math.PI / 2; catcher.position.y = -0.061; catcher.receiveShadow = true;
   root.add(catcher);
+  // a soft contact shadow under the floor slab, so the model sits on the table instead of floating
+  const contact = new THREE.Mesh(new THREE.PlaneGeometry(5.62 / 0.6, 4.62 / 0.6), M.contact);
+  contact.rotation.x = -Math.PI / 2; contact.position.set(0.09, -0.0606, -0.01); contact.renderOrder = 1;
+  root.add(contact);
 
   const W = new THREE.Group();
   W.add(boxFT(-2.72, 0, -2.32, -0.7, 2.6, -2.2, M.wall));
@@ -212,11 +225,25 @@ export function buildKitchen() {
   W.add(boxFT(-0.72, 1.12, -2.3, 0.72, 1.15, -2.23, M.frame));
   W.add(boxFT(-0.015, 1.12, -2.3, 0.015, 2.2, -2.24, M.frame));
   W.add(boxFT(-0.76, 1.1, -2.27, 0.76, 1.125, -2.17, M.sill));
+  const glazing = mesh(planeGeo(1.36, 1.04), M.pane, { cast: false, receive: false });
+  glazing.position.set(0, 1.67, -2.262);
+  W.add(glazing);
   bakeInto(G.walls, W);
-  // the view outside: a box behind the opening, seen from inside only
+  const pane = G.walls.children.find((child) => child.material === M.pane);
+  // the view outside: a box behind the opening, seen from inside only; the evening view fades in over the day one
   const well = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.08, 0.58), [M.skySide, M.skySide, M.skyTop, M.skyLow, M.none, M.sky]);
   well.position.set(0, 1.66, -2.61);
   root.add(well);
+  const nightSky = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.08), M.skyNight);
+  nightSky.position.set(0, 1.66, -2.895); nightSky.visible = false;
+  root.add(nightSky);
+  // glass, glow and the view outside are left out of the ambient occlusion pass (see stage.js)
+  const aoHidden = [];
+  let halos = [];
+  function refreshAoHidden() {
+    aoHidden.length = 0;
+    aoHidden.push(pane, well, nightSky, catcher, contact, ...halos, ...G.pendants.children.filter((child) => child.material === M.glass));
+  }
 
   // ---------------------------------------------------------------- cabinet boxes (carcass)
   const C = new THREE.Group();
@@ -421,9 +448,11 @@ export function buildKitchen() {
   let pendantLights = [];
   function rebuildPendants(look) {
     const P = new THREE.Group();
-    lights.children.filter((l) => l.userData.pendant).forEach((l) => lights.remove(l));
-    pendantLights = [];
+    for (const light of pendantLights) { lights.remove(light); light.dispose(); }
+    for (const halo of halos) lights.remove(halo);
+    pendantLights = []; halos = [];
     const top = 2.6;
+    P.add(boxFT(-2.6, top - 0.008, -0.13, 0.95, top + 0.008, -0.11, M.rod));   // the rail the pendants hang from
     M.rod.color.set(look.finish === 'black' ? '#1C1C1D' : '#C9A35B');
     M.rod.roughness = look.finish === 'black' ? 0.55 : 0.35;
     M.rod.metalness = look.finish === 'black' ? 0.4 : 1;
@@ -458,8 +487,11 @@ export function buildKitchen() {
       const bulb = mesh(new THREE.SphereGeometry(0.028, 16, 12), M.bulb, { cast: false }); bulb.position.set(x, bulbY, z); P.add(bulb);
       const pl = new THREE.PointLight(WARM, 0, 0, 2); pl.position.set(x, bulbY - 0.04, z); pl.userData.pendant = true;
       lights.add(pl); pendantLights.push(pl);
+      const halo = new THREE.Sprite(M.halo); halo.position.set(x, bulbY, z); halo.scale.setScalar(0.7);
+      lights.add(halo); halos.push(halo);
     }
     bakeInto(G.pendants, P);
+    refreshAoHidden();
     applyNight();
   }
 
@@ -510,6 +542,7 @@ export function buildKitchen() {
     }
     if (changed('edge', ct.edge)) rebuildCounters(ct.edge.waterfall);
     if (changed('splash', bs.tile)) {
+      const hadMap = !!M.splash.map, hadBump = !!M.splash.bumpMap;
       const t = bs.tile;
       let set;
       if (t.pattern === 'subway') set = TX.subwayTiles(t);
@@ -518,20 +551,21 @@ export function buildKitchen() {
       else set = { map: TX.speckleTex({ base: t.base, flecks: ['#D9D6D0', '#C9C6C0', '#FFFFFF'] }, 0.9), bump: null };
       M.splash.map = set.map; M.splash.bumpMap = set.bump; M.splash.bumpScale = 1.6;
       M.splash.roughness = t.pattern === 'zellige' ? 0.18 : 0.28; M.splash.clearcoat = t.pattern === 'slab' ? 0.5 : 0.7; M.splash.clearcoatRoughness = 0.1;
-      M.splash.needsUpdate = true;
+      if (hadMap !== !!M.splash.map || hadBump !== !!M.splash.bumpMap) M.splash.needsUpdate = true;
     }
     if (changed('stools', isl.stools)) rebuildStools(isl.stools.stool);
     if (changed('pendant', li.pendant)) rebuildPendants(li.pendant);
     if (changed('led', li.under)) { state.led = li.under.underCabinet; G.leds.visible = state.led; applyNight(); }
     if (changed('floor', fl.floor)) {
+      const hadMap = !!M.floor.map;
       const f = fl.floor;
       M.floor.map = f.floor === 'planks' ? TX.plankFloor(f) : f.floor === 'tile' ? TX.stoneFloor(f) : TX.herringboneWood(f);
       M.floor.roughness = f.floor === 'tile' ? 0.42 : 0.55; M.floor.clearcoat = f.floor === 'tile' ? 0.2 : 0.15; M.floor.clearcoatRoughness = 0.5;
-      M.floor.needsUpdate = true;
+      if (!hadMap) M.floor.needsUpdate = true;
     }
     if (changed('appFinish', ap.package.finish)) {
       const black = ap.package.finish === 'black';
-      M.steel.color.set(black ? '#3B3C3F' : '#D9DCDE'); M.steel.roughness = black ? 0.36 : 0.36; M.steel.metalness = black ? 0.8 : 0.85;
+      M.steel.color.set(black ? '#3B3C3F' : '#D9DCDE'); M.steel.roughness = black ? 0.4 : 0.36; M.steel.metalness = black ? 0.8 : 0.85;
     }
     if (changed('hw', hw.finish)) {
       const h = hw.finish; M.metal.color.set(h.metal); M.metal.roughness = h.roughness; M.metal.metalness = h.dark ? 0.25 : 1;
@@ -540,35 +574,54 @@ export function buildKitchen() {
   }
 
   // ---------------------------------------------------------------- day and evening (t: 0 = day, 1 = evening)
+  const skyColours = [
+    [M.skySide, new THREE.Color('#CFE2EE'), new THREE.Color('#1A2540')],
+    [M.skyTop, new THREE.Color('#9CC1E2'), new THREE.Color('#0A1122')],
+    [M.skyLow, new THREE.Color('#8DB17C'), new THREE.Color('#0E1622')],
+  ];
   function applyNight() {
     const t = state.night;
-    M.bulb.emissiveIntensity = t * 8;
-    M.glass.emissiveIntensity = t * 0.35; M.glass.opacity = 0.3 + t * 0.25;
-    M.shadeIn.emissiveIntensity = t * 0.9;
-    M.linen.emissiveIntensity = t * 0.75;
-    M.led.emissiveIntensity = state.led ? t * 5 : 0;
-    pendantLights.forEach((l) => { l.intensity = t * 2.4; });
-    rectLights.forEach((l) => { l.intensity = state.led ? t * 7 : 0; });
-    const nightSky = t > 0.5;
-    if (M.sky.map !== TX.skyTex(nightSky)) { M.sky.map = TX.skyTex(nightSky); M.sky.needsUpdate = true; }
-    const lerp = (a, b) => new THREE.Color(a).lerp(new THREE.Color(b), t);
-    M.skySide.color.copy(lerp('#CFE2EE', '#1A2540')); M.skyTop.color.copy(lerp('#9CC1E2', '#0A1122')); M.skyLow.color.copy(lerp('#8DB17C', '#0E1622'));
+    M.bulb.emissiveIntensity = t * 9;
+    M.glass.emissiveIntensity = t * 0.5; M.glass.opacity = 0.28 + t * 0.3;
+    M.shadeIn.emissiveIntensity = t * 1.4;
+    M.linen.emissiveIntensity = t * 0.9;
+    M.led.emissiveIntensity = state.led ? t * 6 : 0;
+    M.halo.opacity = t * 0.5;
+    pendantLights.forEach((l) => { l.intensity = t * 3.4; });
+    rectLights.forEach((l) => { l.intensity = state.led ? t * 8 : 0; });
+    M.skyNight.opacity = t; nightSky.visible = t > 0.001;
+    skyColours.forEach(([material, day, night]) => material.color.copy(day).lerp(night, t));
   }
   function setNight(t) { state.night = t; applyNight(); }
 
   // ---------------------------------------------------------------- camera views (position, target)
+  // One named shot per step. The name is announced to screen readers when the camera goes there.
   const views = {
-    home: { pos: [3.15, 2.75, 4.7], target: [-0.45, 0.95, -0.75] },
-    cabinets: { pos: [2.1, 2.2, 3.1], target: [-0.9, 1.2, -1.5] },
-    countertops: { pos: [1.7, 2.35, 2.1], target: [-0.3, 0.9, -1.0] },
-    backsplash: { pos: [0.75, 1.6, 0.9], target: [-0.35, 1.2, -2.2] },
-    island: { pos: [2.2, 1.75, 3.0], target: [0.2, 0.75, -0.15] },
-    lighting: { pos: [2.0, 1.45, 2.9], target: [0.2, 1.65, -0.2] },
-    flooring: { pos: [2.6, 3.3, 3.5], target: [-0.2, 0.0, -0.3] },
-    appliances: { pos: [1.5, 1.75, 2.5], target: [-2.1, 1.0, -0.1] },
-    hardware: { pos: [0.95, 1.45, 0.45], target: [-0.35, 0.85, -1.6] },
-    walls: { pos: [3.0, 2.1, 4.2], target: [-0.6, 1.5, -1.2] },
+    home: { name: 'Whole kitchen', pos: [4.1, 3.5, 6.3], target: [-0.05, 1.12, -0.35] },
+    cabinets: { name: 'Cabinets, back and left runs', pos: [2.25, 2.15, 3.2], target: [-0.85, 1.18, -1.5] },
+    countertops: { name: 'Benchtops from above the island', pos: [1.75, 2.4, 2.15], target: [-0.3, 0.9, -1.0] },
+    backsplash: { name: 'Splashback behind the sink', pos: [0.8, 1.58, 0.95], target: [-0.35, 1.2, -2.2] },
+    island: { name: 'Island and stools', pos: [2.3, 1.75, 3.1], target: [0.2, 0.75, -0.15] },
+    lighting: { name: 'Pendants over the island', pos: [2.05, 1.5, 3.0], target: [0.2, 1.62, -0.2] },
+    flooring: { name: 'Floor from above', pos: [2.7, 3.45, 3.6], target: [-0.2, 0.0, -0.3] },
+    appliances: { name: 'Cooker, rangehood and fridge', pos: [1.55, 1.75, 2.55], target: [-2.1, 1.0, -0.1] },
+    hardware: { name: 'Handles and tapware at the sink', pos: [0.95, 1.45, 0.5], target: [-0.35, 0.85, -1.6] },
+    walls: { name: 'Walls and window', pos: [3.1, 2.1, 4.3], target: [-0.6, 1.5, -1.2] },
   };
 
-  return { root, partObjects, applyLooks, setNight, views };
+  let disposed = false;
+  function dispose() {
+    if (disposed) return;
+    disposed = true;
+    const geometries = new Set();
+    root.traverse((object) => {
+      if (object.geometry) geometries.add(object.geometry);
+      if (object.isLight) object.dispose();
+    });
+    geometries.forEach((geometry) => geometry.dispose());
+    Object.values(M).forEach((material) => material.dispose());
+    root.clear();
+  }
+
+  return { root, partObjects, aoHidden, applyLooks, setNight, views, dispose };
 }

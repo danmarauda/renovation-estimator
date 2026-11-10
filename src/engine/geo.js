@@ -46,8 +46,8 @@ export function cyl(rTop, rBot, h, mat, seg = 24, opts) {
 
 // Free every geometry under a group (materials are shared and kept).
 export function clear(group) {
-  for (const child of [...group.children]) {
-    child.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
-    group.remove(child);
-  }
+  const geometries = new Set();
+  group.traverse((object) => { if (object !== group && object.geometry) geometries.add(object.geometry); });
+  geometries.forEach((geometry) => geometry.dispose());
+  group.clear();
 }
