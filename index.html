@@ -26,90 +26,92 @@
 </head>
 <body class="ws">
   <main class="app">
-    <section class="stage" id="stage" aria-label="3D kitchen">
-      <canvas id="scene" tabindex="0" aria-label="3D kitchen. Drag, or use the arrow keys, to look around. Choose parts with the buttons beside it."></canvas>
-      <p class="stage-fallback" id="fallback" role="status">Loading your 3D kitchen. You can already choose finishes and check your estimate.</p>
-
-      <div class="estimate ws-card" id="estimate">
-        <div class="est-head">
-          <span class="ws-eyebrow est-live"><i class="live-dot" aria-hidden="true"></i><span data-bind="estimateLabel"></span></span>
-          <span class="ws-chip" id="sizeChip"></span>
-        </div>
-        <p class="est-price" aria-hidden="true"><span class="lo" data-price="lo"></span><span class="dash">–</span><span class="hi" data-price="hi"></span></p>
-        <span class="delta ws-chip ink" id="delta" aria-hidden="true"></span>
-        <p class="ws-cap est-note" data-bind="disclaimer"></p>
-        <p class="ws-h cta-lead" data-bind="ctaLead"></p>
-        <button class="cta" type="button" data-open-consult><span class="cta-label" data-bind="ctaButton"></span><span class="cta-dot" aria-hidden="true"><svg class="i"><use href="#i-arrow"/></svg></span></button>
-      </div>
-
-      <div class="stage-tools">
-        <div class="ws-seg time-seg" role="group" aria-label="Time of day">
-          <button class="fg-pill on" type="button" aria-pressed="true" data-time="day"><svg class="i" aria-hidden="true"><use href="#i-sun"/></svg>Day</button>
-          <button class="fg-pill" type="button" aria-pressed="false" data-time="evening"><svg class="i" aria-hidden="true"><use href="#i-moon"/></svg>Evening</button>
-        </div>
-        <div class="tool-row">
-          <button class="fg-pill tool" type="button" id="autoRotate" aria-pressed="false" aria-label="Auto-rotate"><svg class="i" aria-hidden="true"><use href="#i-rotate"/></svg><span class="t">Auto-rotate</span></button>
-          <button class="fg-pill tool" type="button" id="wholeView" aria-label="View the whole kitchen"><svg class="i" aria-hidden="true"><use href="#i-expand"/></svg><span class="t">Whole kitchen</span></button>
-        </div>
-      </div>
-
-      <p class="stage-hint" id="hint"><svg class="i" aria-hidden="true"><use href="#i-move"/></svg><span>Drag to look around. Click any part to change it.</span></p>
-      <div class="tip" id="tip" aria-hidden="true"></div>
-    </section>
-
-    <aside class="panel" id="panel" aria-busy="true">
-      <header class="brand">
+    <header class="masthead">
+      <div class="brand">
         <span class="logo" data-bind="logoText" aria-hidden="true"></span>
         <span class="brand-txt"><span class="brand-name" data-bind="name"></span><span class="ws-cap" data-bind="tagline"></span></span>
         <a class="ws-btn quiet call" id="callLink" href="#"><svg class="i" aria-hidden="true"><use href="#i-phone"/></svg><span data-bind="phone"></span></a>
-      </header>
-
+      </div>
       <div class="intro">
         <h1 class="ws-loud m title"><span data-bind="title"></span> <em data-bind="titleEm"></em></h1>
-        <p class="ws-label" data-bind="intro"></p>
+        <p class="ws-label lede" data-bind="intro"></p>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <section class="stage" id="stage" aria-label="3D kitchen">
+        <canvas id="scene" tabindex="0" aria-label="3D kitchen. Drag, or use the arrow keys, to look around. Choose parts with the buttons below it."></canvas>
+        <p class="stage-fallback" id="fallback" role="status">Loading your 3D kitchen. You can already choose finishes and check your estimate.</p>
+
+        <div class="stage-tools" role="group" aria-label="View">
+          <div class="ws-seg time-seg" role="group" aria-label="Time of day">
+            <button class="fg-pill on" type="button" aria-pressed="true" data-time="day"><svg class="i" aria-hidden="true"><use href="#i-sun"/></svg>Day</button>
+            <button class="fg-pill" type="button" aria-pressed="false" data-time="evening"><svg class="i" aria-hidden="true"><use href="#i-moon"/></svg>Evening</button>
+          </div>
+          <button class="fg-pill tool" type="button" id="autoRotate" aria-pressed="false" aria-label="Auto-rotate"><svg class="i" aria-hidden="true"><use href="#i-rotate"/></svg><span class="t">Auto-rotate</span></button>
+          <button class="fg-pill tool" type="button" id="wholeView" aria-label="View the whole kitchen"><svg class="i" aria-hidden="true"><use href="#i-expand"/></svg><span class="t">Whole kitchen</span></button>
+        </div>
+
+        <p class="stage-hint" id="hint"><svg class="i" aria-hidden="true"><use href="#i-move"/></svg><span>Drag to look around. Click any part to change it.</span></p>
+        <div class="tip" id="tip" aria-hidden="true"></div>
+      </section>
+
+      <nav class="dock" id="dock" aria-label="Design steps"></nav>
+    </div>
+
+    <aside class="panel" id="panel" aria-label="Options and estimate" aria-busy="true">
+      <div class="panel-body" id="inspector">
+        <section class="view" id="viewSize" aria-labelledby="sizeLabel" hidden>
+          <div class="view-head">
+            <span class="ws-ico"><svg class="i" aria-hidden="true"><use href="#i-size"/></svg></span>
+            <div><h2 class="ws-title" id="sizeLabel" tabindex="-1">Kitchen size</h2><p class="ws-cap">Choose the closest floor area to set your allowances.</p></div>
+          </div>
+          <div class="size-opts" id="sizes" role="radiogroup" aria-labelledby="sizeLabel" aria-describedby="sizeNote"></div>
+          <p class="ws-cap" id="sizeNote" data-bind="sizeNote"></p>
+          <details class="measurements">
+            <summary class="ws-label">3D layout dimensions · mm</summary>
+            <dl id="measurements"></dl>
+            <p class="ws-cap" data-bind="measurementNote"></p>
+          </details>
+        </section>
+
+        <section class="view options" id="options" aria-live="off" hidden></section>
+
+        <section class="view" id="viewSummary" aria-labelledby="bdLabel" hidden>
+          <div class="view-head">
+            <span class="ws-ico"><svg class="i" aria-hidden="true"><use href="#i-summary"/></svg></span>
+            <div><h2 class="ws-title" id="bdLabel" tabindex="-1">Your estimate</h2><p class="ws-cap" id="bdSize"></p></div>
+          </div>
+          <ul class="breakdown" id="breakdown"></ul>
+          <div class="bd-total"><span>Estimated total</span><strong id="bdTotal"></strong></div>
+          <p class="ws-cap" data-bind="disclaimer"></p>
+          <div class="foot ws-cap">
+            <p data-bind="sampleNotice"></p>
+            <p>All allowances are in Australian dollars (AUD). Final scope, GST treatment and pricing require confirmation.</p>
+          </div>
+        </section>
       </div>
 
-      <section class="block" aria-labelledby="sizeLabel">
-        <h2 class="ws-eyebrow" id="sizeLabel">Kitchen size</h2>
-        <div class="ws-seg size-seg" id="sizes" role="group" aria-labelledby="sizeLabel" aria-describedby="sizeNote"></div>
-        <p class="ws-cap" id="sizeNote" data-bind="sizeNote"></p>
-        <details class="measurements">
-          <summary class="ws-label">3D layout dimensions · mm</summary>
-          <dl id="measurements"></dl>
-          <p class="ws-cap" data-bind="measurementNote"></p>
-        </details>
-      </section>
+      <div class="stepper">
+        <button class="ws-btn ghost" type="button" id="stepPrev"><svg class="i" aria-hidden="true"><use href="#i-chev-l"/></svg><span></span></button>
+        <button class="ws-btn quiet" type="button" id="stepNext"><span></span><svg class="i" aria-hidden="true"><use href="#i-chev-r"/></svg></button>
+      </div>
 
-      <section class="block" aria-labelledby="partsLabel">
-        <h2 class="ws-eyebrow" id="partsLabel">Pick a part</h2>
-        <div class="parts" id="parts"></div>
-      </section>
-
-      <section class="block options ws-card" id="options" aria-live="off"></section>
-
-      <section class="block" aria-labelledby="bdLabel">
-        <div class="bd-head">
-          <h2 class="ws-title" id="bdLabel">Your estimate</h2>
-          <span class="ws-chip" id="bdSize"></span>
+      <footer class="panel-foot" id="estimate">
+        <span class="delta ws-chip ink" id="delta" aria-hidden="true"></span>
+        <div class="est-head">
+          <span class="ws-eyebrow est-live"><i class="live-dot" aria-hidden="true"></i><span data-bind="estimateLabel"></span></span>
+          <button class="chip-btn" type="button" id="sizeBtn" data-step="size"><span id="sizeChip"></span><svg class="i" aria-hidden="true"><use href="#i-chev-r"/></svg></button>
         </div>
-        <ul class="breakdown" id="breakdown"></ul>
-        <div class="bd-total"><span>Estimated total</span><strong id="bdTotal"></strong></div>
-        <p class="ws-cap" data-bind="disclaimer"></p>
-      </section>
-
-      <footer class="foot ws-cap">
-        <p data-bind="sampleNotice"></p>
-        <p>All allowances are in Australian dollars (AUD). Final scope, GST treatment and pricing require confirmation.</p>
+        <div class="est-row">
+          <p class="est-price" aria-hidden="true"><span class="lo" data-price="lo"></span><span class="dash">–</span><span class="hi" data-price="hi"></span></p>
+          <button class="text-btn" type="button" id="breakdownBtn" data-step="summary">Breakdown<svg class="i" aria-hidden="true"><use href="#i-chev-r"/></svg></button>
+        </div>
+        <p class="ws-cap est-note" data-bind="disclaimer"></p>
+        <p class="ws-h cta-lead" data-bind="ctaLead"></p>
+        <button class="cta" type="button" data-open-consult><span class="cta-label" data-bind="ctaButton"></span><span class="cta-dot" aria-hidden="true"><svg class="i"><use href="#i-arrow"/></svg></span></button>
       </footer>
     </aside>
-
-    <div class="mbar fg" id="mbar">
-      <div class="mbar-price">
-        <span class="ws-eyebrow"><i class="live-dot" aria-hidden="true"></i><span data-bind="estimateLabel"></span></span>
-        <span class="mprice" aria-hidden="true"><span data-price="lo"></span> – <span data-price="hi"></span></span>
-      </div>
-      <button class="cta" type="button" data-open-consult><span class="cta-label" data-bind="ctaButton"></span><span class="cta-dot" aria-hidden="true"><svg class="i"><use href="#i-arrow"/></svg></span></button>
-    </div>
   </main>
 
   <dialog class="fg ws-sheet consult" id="consult" aria-labelledby="consultTitle">

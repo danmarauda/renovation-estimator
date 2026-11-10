@@ -46,7 +46,8 @@ for (const measurement of room.measurements) {
 }
 
 // ------------------------------------------------------------------ state
-const state = { size: room.defaultSize, choices: defaultChoices(room), active: room.parts[0].id };
+// active is the step shown in the inspector: 'size', a part id, or 'summary'
+const state = { size: room.defaultSize, choices: defaultChoices(room), active: 'size' };
 const looks = () => {
   const out = {};
   for (const p of room.parts) { out[p.id] = {}; for (const g of p.groups) out[p.id][g.id] = optionOf(room, p.id, g.id, state.choices[p.id][g.id]).look; }
@@ -80,16 +81,20 @@ const panel = createPanel({
         stage.pulse();
       }
     },
-    selectPart(id, from) { selectPart(id, from); },
+    selectStep(id, from) { selectStep(id, from); },
     previewPart(id) { stage && stage.preview(id); },
   },
 });
-function selectPart(id, from) {
+const inspector = document.getElementById('inspector');
+const activePart = () => (panel.isPart(state.active) ? state.active : null);
+function selectStep(id, from) {
   state.active = id;
   panel.update(null);
-  if (stage) { stage.select(id); stage.flyTo(kitchen.views[id] || kitchen.views.home); }
-  const opts = document.getElementById('options');
-  if (from === 'scene' || from === 'breakdown' || isPhone()) opts.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
+  if (stage) { stage.select(activePart()); stage.flyTo(kitchen.views[id] || kitchen.views.home); }
+  inspector.scrollTop = 0;
+  if (isPhone()) inspector.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
+  // the control that was used disappears or changes meaning, so focus follows to the new view
+  if (from === 'stepper' || from === 'breakdown' || from === 'shortcut') panel.focusHeading();
   hideHint();
 }
 panel.update(null);
@@ -137,7 +142,7 @@ function setupPicking() {
     down = null;
     if (moved > 6 || !quick) return;
     const id = stage.partAt(e.clientX, e.clientY);
-    if (id) selectPart(id, 'scene');
+    if (id) selectStep(id, 'scene');
   }, listener);
   // hover label (mouse only), sampled once per frame at the latest pointer position
   canvas.addEventListener('pointermove', (e) => {
@@ -189,7 +194,7 @@ async function initializeScene() {
     kitchen = builders[roomId]();
     kitchen.applyLooks(looks());
     stage.setRoom(kitchen);
-    stage.select(state.active);
+    stage.select(activePart());
     setupPicking();
     setSceneAvailability(true);
   } catch (error) {

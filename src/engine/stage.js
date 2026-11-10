@@ -106,8 +106,8 @@ export function createStage({ canvas, host, reducedMotion, brandColor, coarse, o
     composer.setPixelRatio(pr);
     composer.setSize(w, h);
     camera.aspect = w / h;
-    // narrow screens: step back so the whole kitchen still fits
-    const nf = Math.max(1, 1.22 / camera.aspect) ** 0.85;
+    // narrow stages: step back in proportion, so the width of kitchen in view stays the same
+    const nf = Math.max(1, 1.22 / camera.aspect);
     if (fit !== nf) {
       const off = camera.position.clone().sub(controls.target).multiplyScalar(nf / fit);
       camera.position.copy(controls.target).add(off);

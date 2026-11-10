@@ -16,8 +16,9 @@
   --cta-glow: rgba(255, 255, 255, .14);
   --sel-ink: var(--ink);       /* text on a selected (white) option */
   --sel-ink-2: var(--ink-2);
-  --panel-w: 420px;
+  --panel-w: clamp(400px, 28vw, 520px);
   --stage-r: 30px;
+  --stage-h: clamp(260px, 38vh, 440px);   /* phones: the height of the kitchen that sticks to the top */
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -30,14 +31,19 @@ html, body { height: 100%; }
 [hidden] { display: none !important; }
 button:disabled { cursor: not-allowed; opacity: .55; }
 body.ws { overflow-x: clip; }
+#live { top: 0; left: 0; }   /* pinned, or its 1px box after the full-height app makes the page scroll by a pixel */
 
-/* ================================================================ layout */
-.app { display: grid; grid-template-columns: minmax(0, 1fr) var(--panel-w); height: 100dvh; }
-.panel { overflow-y: auto; overscroll-behavior: contain; padding: var(--s6) var(--s6) var(--s10); display: grid; align-content: start; gap: var(--s8); }
+/* ================================================================ layout
+   Left: the kitchen with its step dock underneath. Right: the brand, the inspector for the active step,
+   and the estimate pinned to the bottom. Phones are laid out in panel.css. */
+.app { display: grid; grid-template-columns: minmax(0, 1fr) var(--panel-w); grid-template-rows: auto minmax(0, 1fr); height: 100dvh; }
+.masthead { grid-column: 2; grid-row: 1; }
+.workspace { grid-column: 1; grid-row: 1 / -1; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: var(--s2); padding: 12px 0 12px 12px; min-width: 0; min-height: 0; }
+.panel { grid-column: 2; grid-row: 2; display: grid; grid-template-rows: minmax(0, 1fr) auto auto; min-height: 0; }
 @media (max-width: 1199px) { :root { --panel-w: 384px; } }
 
 /* ================================================================ the stage */
-.stage { position: relative; margin: 12px 0 12px 12px; border-radius: var(--stage-r); corner-shape: squircle; overflow: hidden; isolation: isolate;
+.stage { position: relative; min-height: 0; border-radius: var(--stage-r); corner-shape: squircle; overflow: hidden; isolation: isolate;
   background: radial-gradient(120% 90% at 55% 0%, var(--st-4) 0%, var(--st-1) 55%, var(--st-0) 100%); }
 @supports (corner-shape: squircle) { .stage { border-radius: calc(var(--stage-r) * 1.5); } }
 .stage::before { content: ""; position: absolute; inset: 0; z-index: -1; opacity: 0; transition: opacity 900ms var(--ease);
@@ -50,8 +56,7 @@ body.ws { overflow-x: clip; }
 .stage-fallback { position: absolute; left: 50%; top: 50%; translate: -50% -50%; max-width: 32ch; text-align: center; color: var(--ink-2); }
 
 /* overlays on the stage are opaque enough to read over any part of the kitchen */
-.stage-tools { position: absolute; top: 16px; right: 16px; z-index: 3; display: grid; justify-items: end; gap: var(--s2); }
-.tool-row { display: flex; gap: var(--s2); }
+.stage-tools { position: absolute; top: 16px; right: 16px; z-index: 3; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--s2); max-width: calc(100% - 32px); }
 .stage .fg-pill { --pill-bg: color-mix(in srgb, var(--st-3) 90%, transparent); background: var(--pill-bg); color: var(--ink); gap: 6px; padding: 0 16px; font-size: 14px;
   box-shadow: var(--lift-1); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
 .stage .fg-pill .i { width: 18px; height: 18px; }
@@ -72,18 +77,46 @@ body.ws { overflow-x: clip; }
 .tip.show { opacity: 1; }
 .tip b { font-weight: 500; }
 
-/* ================================================================ the live estimate card */
-.estimate { position: absolute; top: 16px; left: 16px; z-index: 3; width: min(372px, calc(100% - 32px)); padding: var(--s5); display: grid; gap: var(--s2); box-shadow: var(--lift-2); }
-.est-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); }
+/* ================================================================ the step dock: size, every part, then the estimate */
+.dock { position: relative; display: flex; align-items: stretch; gap: 4px; padding: 6px; border-radius: 28px; background: var(--st-2);
+  overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+.dock::-webkit-scrollbar { display: none; }
+.step { flex: 1 0 72px; display: grid; justify-items: center; align-content: center; gap: 4px; min-height: 60px; padding: 8px 6px; border-radius: 22px;
+  color: var(--ink); font: 400 13px/1.2 var(--font); white-space: nowrap;
+  transition: background var(--t-fast) var(--ease), transform var(--t-press) var(--ease), box-shadow var(--t) var(--ease); }
+.step .i { width: 22px; height: 22px; }
+.step:hover { background: var(--st-3); }
+.step:active { transform: scale(.97); }
+.step:focus-visible { outline-offset: -3px; }
+.step[aria-current="step"] { background: var(--st-5); color: var(--sel-ink); box-shadow: var(--lift-1); }
+.dock-rule { flex: none; width: 1px; margin: 12px 4px; background: var(--rule); }
+
+/* ================================================================ the estimate, pinned under the inspector */
+.panel-foot { position: relative; margin: 0 12px 12px; padding: var(--s5); display: grid; gap: var(--s2); border-radius: var(--r-card); corner-shape: squircle;
+  background: var(--st-3); box-shadow: var(--lift-2); }
+@supports (corner-shape: squircle) { .panel-foot { border-radius: calc(var(--r-card) * var(--sq)); } }
+.est-head, .est-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s1) var(--s3); }
+.est-row { flex-wrap: wrap; }
 .est-live { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); }
 .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 4px color-mix(in oklab, var(--brand) 22%, transparent); flex: none; }
 @media (prefers-color-scheme: dark) { .live-dot { background: var(--p-accent-on-dark); } }
-.est-price { margin: 2px 0 0; font: 400 34px/1.05 var(--font); letter-spacing: -0.035em; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--ink); }
+.est-price { font: 400 clamp(26px, 2vw, 34px)/1.05 var(--font); letter-spacing: -0.035em; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--ink); }
 .est-price .dash { color: var(--ink-2); margin: 0 .18em; }
-.delta { position: absolute; right: var(--s5); top: 54px; opacity: 0; translate: 0 6px; transition: opacity var(--t) var(--ease), translate var(--t) var(--ease); font-variant-numeric: tabular-nums; }
+.chip-btn { display: inline-flex; align-items: center; gap: 2px; min-height: 32px; padding: 0 8px 0 12px; border-radius: 999px; background: var(--st-1); color: var(--ink);
+  font: 400 13px/1 var(--font); white-space: nowrap; transition: background var(--t-fast) var(--ease), transform var(--t-press) var(--ease); }
+.chip-btn:hover { background: var(--st-2); }
+.chip-btn:active, .text-btn:active { transform: scale(.97); }
+.text-btn { display: inline-flex; align-items: center; gap: 2px; min-height: 32px; color: var(--ink); font: 500 14px/1 var(--font);
+  text-decoration: underline; text-decoration-color: var(--ink-3); text-underline-offset: 4px; transition: transform var(--t-press) var(--ease); }
+.text-btn:hover { text-decoration-color: currentColor; }
+.ws .chip-btn .i, .ws .text-btn .i { width: 16px; height: 16px; }
+.delta { position: absolute; right: var(--s5); top: -13px; z-index: 1; opacity: 0; translate: 0 6px; transition: opacity var(--t) var(--ease), translate var(--t) var(--ease); font-variant-numeric: tabular-nums; }
 .delta.show { opacity: 1; translate: 0 0; }
 .est-note { text-wrap: pretty; }
 .cta-lead { margin-top: var(--s2); }
+/* short screens give the room back to the inspector; the disclaimer stays in the estimate view and the consultation sheet */
+@media (max-height: 999px) { .cta-lead { display: none; } }
+@media (max-height: 779px) { .est-note { display: none; } .panel-foot { padding: var(--s4); } }
 
 /* ================================================================ the $300M button (NOTES.md 2026-10-14) */
 .cta { position: relative; display: inline-flex; align-items: center; justify-content: space-between; gap: 14px; width: 100%; min-height: 52px; padding: 6px 6px 6px 22px;
