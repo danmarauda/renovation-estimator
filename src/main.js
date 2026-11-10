@@ -75,8 +75,8 @@ const panel = createPanel({
     change(partId) {
       panel.update(partId);
       if (kitchen && partId) {
-        kitchen.applyLooks(looks());
-        stage.invalidate({ shadows: ['cabinets', 'countertops', 'island', 'lighting', 'appliances'].includes(partId) });
+        // the old finish fades into the new one; nothing pops
+        stage.crossfade(() => kitchen.applyLooks(looks()), { shadows: ['cabinets', 'countertops', 'island', 'lighting', 'appliances'].includes(partId) });
         stage.select(partId);
         stage.pulse();
       }
@@ -87,10 +87,18 @@ const panel = createPanel({
 });
 const inspector = document.getElementById('inspector');
 const activePart = () => (panel.isPart(state.active) ? state.active : null);
+// what the 3D view is showing, for people who cannot see it
+const sceneLive = document.getElementById('sceneLive');
+function announceScene(message) { sceneLive.textContent = message; }
 function selectStep(id, from) {
   state.active = id;
   panel.update(null);
-  if (stage) { stage.select(activePart()); stage.flyTo(kitchen.views[id] || kitchen.views.home); }
+  if (stage) {
+    const view = kitchen.views[id] || kitchen.views.home;
+    stage.select(activePart());
+    stage.flyTo(view);
+    announceScene(`3D view: ${view.name}.`);
+  }
   inspector.scrollTop = 0;
   if (isPhone()) inspector.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
   // the control that was used disappears or changes meaning, so focus follows to the new view
@@ -108,15 +116,17 @@ document.querySelectorAll('[data-time]').forEach((b) => b.addEventListener('clic
   if (!b.closest('.time-seg')) return;
   const evening = b.dataset.time === 'evening';
   document.querySelectorAll('.time-seg [data-time]').forEach((x) => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-pressed', String(on)); });
-  stage && stage.setEvening(evening);
+  if (stage) { stage.setEvening(evening); announceScene(evening ? 'Evening lighting: pendants and under-cabinet lights on.' : 'Day lighting.'); }
 }));
 const rot = document.getElementById('autoRotate');
 rot.addEventListener('click', () => {
   const on = rot.getAttribute('aria-pressed') !== 'true';
   rot.setAttribute('aria-pressed', String(on));
-  stage && stage.setAutoRotate(on);
+  if (stage) { stage.setAutoRotate(on); announceScene(on ? 'Auto-rotate on.' : 'Auto-rotate off.'); }
 });
-document.getElementById('wholeView').addEventListener('click', () => { stage && stage.flyTo(kitchen.views.home); });
+document.getElementById('wholeView').addEventListener('click', () => {
+  if (stage) { stage.resetView(); announceScene(`3D view: ${kitchen.views.home.name}.`); }
+});
 
 // picking in 3D: a click (not a drag) selects the part under the pointer
 const pointerEvents = new AbortController();
@@ -130,6 +140,7 @@ function setupPicking() {
     pendingPick = 0;
     tip.classList.remove('show');
     canvas.classList.remove('is-pointing');
+    stage.preview(null);
   }
   canvas.addEventListener('pointerdown', (e) => {
     clearHover();
@@ -153,6 +164,7 @@ function setupPicking() {
       pendingPick = 0;
       const id = stage.partAt(pointerX, pointerY);
       canvas.classList.toggle('is-pointing', !!id);
+      stage.preview(id);
       if (!id) { tip.classList.remove('show'); return; }
       const p = room.parts.find((x) => x.id === id);
       tip.innerHTML = `<b></b> · click to change`;
@@ -189,7 +201,8 @@ async function initializeScene() {
     ]);
     if (disposed) return;
     releaseTextures = disposeTextures;
-    stage = createStage({ canvas, host: stageEl, reducedMotion, brandColor: cfg.business.brandColor, coarse, onAvailabilityChange: setSceneAvailability });
+    const edgeColor = getComputedStyle(document.documentElement).getPropertyValue('--brass').trim() || undefined;
+    stage = createStage({ canvas, host: stageEl, reducedMotion, edgeColor, coarse, onAvailabilityChange: setSceneAvailability });
     if (!stage) throw new Error('WebGL is unavailable');
     kitchen = builders[roomId]();
     kitchen.applyLooks(looks());
@@ -197,6 +210,11 @@ async function initializeScene() {
     stage.select(activePart());
     setupPicking();
     setSceneAvailability(true);
+    // the arrival: the live kitchen fades in over its poster while the camera settles (a cut with reduced motion)
+    stage.arrive();
+    stageEl.classList.add('is-live');
+    // development only: lets the renderer be measured (renderer.info) from the console; stripped from the build
+    if (import.meta.env.DEV) window.__studio = { stage, kitchen };
   } catch (error) {
     if (disposed) return;
     pointerEvents.abort();
@@ -207,6 +225,7 @@ async function initializeScene() {
     stage = null;
     kitchen = null;
     canvas.hidden = true;
+    stageEl.classList.add('is-failed');   // the poster shows the default finishes, so it goes when the 3D view cannot follow the choices
     setSceneAvailability(false, 'The 3D view could not load. You can still choose every option and see your estimate. Try reloading to restore the 3D view.');
     canvas.setAttribute('aria-busy', 'false');
     console.error('The 3D kitchen could not be initialized.', error);

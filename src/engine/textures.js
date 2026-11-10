@@ -116,10 +116,12 @@ export function butcherTex({ base, grain }) {
 function clouds(ctx, W, H, base, r, n, strength) {
   for (let i = 0; i < n; i++) {
     const x = r() * W, y = r() * H, rad = 60 + r() * W * 0.35;
-    const tone = r() < 0.55 ? shade(base, -strength * (0.5 + r()), 0.35) : shade(base, strength * (0.4 + r()), 0.35);
+    const k = r() < 0.55 ? -strength * (0.5 + r()) : strength * (0.4 + r());
+    // fade to the same colour at zero alpha: fading to transparent black leaves a grey ring in the stone
+    const tone = shade(base, k, 0.35), clear = shade(base, k, 0);
     wrapped(ctx, W, H, () => {
       const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
-      g.addColorStop(0, tone); g.addColorStop(1, 'rgba(0,0,0,0)');
+      g.addColorStop(0, tone); g.addColorStop(1, clear);
       ctx.fillStyle = g; ctx.fillRect(x - rad, y - rad, rad * 2, rad * 2);
     });
   }
@@ -139,7 +141,7 @@ export function marbleTex({ base, vein: vc }, metres = 1.6) {
   return memo(`marble:${base}:${vc}:${metres}`, () => {
     const W = 1024, c = canvas(W), ctx = c.getContext('2d'), r = rng(hashSeed(base + vc));
     ctx.fillStyle = base; ctx.fillRect(0, 0, W, W);
-    clouds(ctx, W, W, base, r, 26, 0.05);
+    clouds(ctx, W, W, base, r, 18, 0.022);   // honed stone has quiet tonal drift, not blotches
     for (let i = 0; i < 5; i++) {
       const pts = vein(ctx, W, W, vc, r, 500 + r() * 900, 1 + r() * 1.6);
       for (let b = 0; b < 2; b++) {           // a branch off the main vein
@@ -345,6 +347,30 @@ export function linenTex() {
       ctx.fillStyle = `rgba(120,100,70,${0.03 + r() * 0.05})`; ctx.fillRect(i, 0, 1, S);
     }
     return toTex(c, 0.12);
+  });
+}
+
+// ---------------------------------------------------------------- the soft glow around a lit pendant (not tiled)
+export function glowTex() {
+  return memo('glow', () => {
+    const S = 128, c = canvas(S), ctx = c.getContext('2d');
+    const g = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+    g.addColorStop(0, 'rgba(255,255,255,.9)'); g.addColorStop(0.18, 'rgba(255,255,255,.38)'); g.addColorStop(0.5, 'rgba(255,255,255,.1)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, S, S);
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  });
+}
+
+// ---------------------------------------------------------------- the soft contact shadow under the floor slab (not tiled)
+export function contactTex() {
+  return memo('contact', () => {
+    const S = 256, c = canvas(S), ctx = c.getContext('2d'), inset = S * 0.2;
+    // only the blurred shadow of an off-canvas rectangle lands on the canvas
+    ctx.shadowColor = '#000'; ctx.shadowBlur = S * 0.11; ctx.shadowOffsetX = S * 2;
+    ctx.fillStyle = '#000'; ctx.fillRect(inset - S * 2, inset, S - inset * 2, S - inset * 2);
+    return new THREE.CanvasTexture(c);
   });
 }
 

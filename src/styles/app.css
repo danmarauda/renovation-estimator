@@ -19,11 +19,17 @@
   --panel-w: clamp(400px, 28vw, 520px);
   --stage-r: 30px;
   --stage-h: clamp(260px, 38vh, 440px);   /* phones: the height of the kitchen that sticks to the top */
+  /* art direction (docs/art-direction.md) */
+  --brass: #D9A441;            /* the 3D hover and selection edge, from the hardware in the model */
+  --dusk: #141519;             /* the stage in the Evening mood */
+  --table-0: #F6F3EE; --table-1: #E6E1D8; --table-2: #D2CCC1;   /* the stage by day: a light studio table */
 }
+:root { --sel-bg: var(--st-5); --sel-ring: transparent; --sel-badge: #121416; --sel-badge-ink: #FFFFFF; }
 @media (prefers-color-scheme: dark) {
   :root {
     --cta-bg: #F1F1F1; --cta-ink: #121214; --cta-glow: rgba(0, 0, 0, .08);
-    --sel-ink: #161616; --sel-ink-2: #4A4A4A;
+    /* selected controls are a raised surface with an ink ring, so the call to action stays the only bright thing beside the kitchen */
+    --sel-bg: #2C2C2F; --sel-ring: rgba(255, 255, 255, .22); --sel-ink: #F4F4F4; --sel-ink-2: #B9B9BC; --sel-badge: #F1F1F1; --sel-badge-ink: #121416;
   }
 }
 
@@ -43,32 +49,52 @@ body.ws { overflow-x: clip; }
 @media (max-width: 1199px) { :root { --panel-w: 384px; } }
 
 /* ================================================================ the stage */
+/* The backdrop belongs to the mood, not the colour scheme: a light studio table by day, dusk in the evening. */
 .stage { position: relative; min-height: 0; border-radius: var(--stage-r); corner-shape: squircle; overflow: hidden; isolation: isolate;
-  background: radial-gradient(120% 90% at 55% 0%, var(--st-4) 0%, var(--st-1) 55%, var(--st-0) 100%); }
+  background: radial-gradient(130% 100% at 50% 8%, var(--table-0) 0%, var(--table-1) 58%, var(--table-2) 100%); }
 @supports (corner-shape: squircle) { .stage { border-radius: calc(var(--stage-r) * 1.5); } }
-.stage::before { content: ""; position: absolute; inset: 0; z-index: -1; opacity: 0; transition: opacity 900ms var(--ease);
-  background: radial-gradient(110% 85% at 50% 10%, #2B2A2E 0%, #17171A 55%, #0C0C0E 100%); }
+.stage::before { content: ""; position: absolute; inset: 0; z-index: -1; opacity: 0; transition: opacity 1100ms var(--ease-in-out);
+  background: radial-gradient(110% 85% at 50% 12%, #2A2A31 0%, var(--dusk) 58%, #0B0B0E 100%); }
 .stage.is-evening::before { opacity: 1; }
-#scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; outline: none; cursor: grab; }
+/* controls that sit on the stage follow the mood too, so they stay quiet on either backdrop */
+.stage { --ov: rgba(255, 255, 255, .66); --ov-hover: rgba(255, 255, 255, .86); --ov-press: #FFFFFF; --ov-ink: #1E1F21; --ov-ink-2: #45464A;
+  --ov-lift: 0 0 0 1px rgba(0, 0, 0, .04), 0 10px 24px -18px rgba(0, 0, 0, .4); --ov-focus: #1F4B3D; }
+.stage.is-evening { --ov: rgba(38, 38, 46, .66); --ov-hover: rgba(58, 58, 68, .8); --ov-press: rgba(255, 255, 255, .2); --ov-ink: #F3F2F0; --ov-ink-2: #C6C5C8;
+  --ov-lift: 0 0 0 1px rgba(255, 255, 255, .06), 0 10px 24px -18px rgba(0, 0, 0, .9); --ov-focus: #F3F2F0; }
+.stage :focus-visible { outline-color: var(--ov-focus); }
+#scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; outline: none; cursor: grab; opacity: 0; transition: opacity 900ms var(--ease); }
+.stage.is-live #scene { opacity: 1; }
+/* the poster: the default kitchen, shown from first paint until the live view is ready */
+.stage-poster { position: absolute; inset: 0; z-index: -1; width: 100%; height: 100%; object-fit: contain; pointer-events: none; transition: opacity 700ms var(--ease); }
+.stage.is-live .stage-poster { opacity: 0; }
+.stage.is-failed .stage-poster { display: none; }
+.stage.is-failed .stage-fallback { bottom: auto; top: 50%; translate: -50% -50%; }
+@media (prefers-reduced-motion: reduce) { #scene, .stage-poster, .stage::before { transition: none; } }
 #scene:active { cursor: grabbing; }
 #scene.is-pointing { cursor: pointer; }
 #scene:focus-visible { outline: 2.5px solid var(--focus); outline-offset: -6px; border-radius: inherit; }
-.stage-fallback { position: absolute; left: 50%; top: 50%; translate: -50% -50%; max-width: 32ch; text-align: center; color: var(--ink-2); }
+.stage-fallback { position: absolute; left: 50%; bottom: 16px; translate: -50% 0; z-index: 2; width: max-content; max-width: min(46ch, calc(100% - 32px)); margin: 0; padding: 10px 16px; border-radius: 18px;
+  text-align: center; text-wrap: balance; font-size: 13px; line-height: 1.4; background: var(--ov-hover); color: var(--ov-ink); box-shadow: var(--ov-lift);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
 
 /* overlays on the stage are opaque enough to read over any part of the kitchen */
 .stage-tools { position: absolute; top: 16px; right: 16px; z-index: 3; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--s2); max-width: calc(100% - 32px); }
-.stage .fg-pill { --pill-bg: color-mix(in srgb, var(--st-3) 90%, transparent); background: var(--pill-bg); color: var(--ink); gap: 6px; padding: 0 16px; font-size: 14px;
-  box-shadow: var(--lift-1); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
-.stage .fg-pill .i { width: 18px; height: 18px; }
-.stage .fg-pill[aria-pressed="true"] { background: var(--st-5); color: #121416; }
-@media (prefers-color-scheme: dark) { .stage .fg-pill[aria-pressed="true"] { background: #F1F1F1; } }
-.time-seg { flex-wrap: nowrap; gap: 4px; padding: 4px; border-radius: 999px; background: color-mix(in srgb, var(--st-2) 80%, transparent); }
-.time-seg .fg-pill { box-shadow: none; --pill-bg: transparent; background: transparent; min-height: 40px; }
-.time-seg .fg-pill[aria-pressed="true"] { box-shadow: var(--lift-1); }
+.stage .fg-pill { --pill-bg: var(--ov); background: var(--pill-bg); color: var(--ov-ink); gap: 6px; padding: 0 14px; font-size: 13px; font-weight: 400;
+  box-shadow: var(--ov-lift); -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2);
+  transition: background-color 600ms var(--ease), color 600ms var(--ease), transform var(--t-press) var(--ease); }
+.stage .fg-pill .i { width: 17px; height: 17px; }
+.stage .fg-pill:hover { background: var(--ov-hover); }
+.stage .fg-pill[aria-pressed="true"] { background: var(--ov-press); color: var(--ov-ink); font-weight: 500; }
+.time-seg { flex-wrap: nowrap; gap: 2px; padding: 3px; border-radius: 999px; background: var(--ov); box-shadow: var(--ov-lift);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2); transition: background-color 600ms var(--ease); }
+.time-seg .fg-pill { box-shadow: none; --pill-bg: transparent; background: transparent; min-height: 38px; -webkit-backdrop-filter: none; backdrop-filter: none; }
+.time-seg .fg-pill:hover { background: color-mix(in srgb, var(--ov-press) 45%, transparent); }
+.time-seg .fg-pill[aria-pressed="true"] { background: var(--ov-press); box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
 
 .stage-hint { position: absolute; left: 16px; bottom: 16px; z-index: 2; display: inline-flex; align-items: center; gap: 8px; margin: 0;
-  padding: 10px 14px; border-radius: 999px; background: color-mix(in srgb, var(--st-3) 92%, transparent); color: var(--ink-2); font-size: 13px; box-shadow: var(--lift-1);
-  transition: opacity var(--t-slow) var(--ease); }
+  padding: 9px 14px; border-radius: 999px; background: var(--ov); color: var(--ov-ink-2); font-size: 13px; box-shadow: var(--ov-lift);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  transition: opacity var(--t-slow) var(--ease), background-color 600ms var(--ease), color 600ms var(--ease); }
 .stage-hint.gone { opacity: 0; pointer-events: none; }
 .stage-hint .i { width: 16px; height: 16px; }
 
@@ -81,22 +107,24 @@ body.ws { overflow-x: clip; }
 .dock { position: relative; display: flex; align-items: stretch; gap: 4px; padding: 6px; border-radius: 28px; background: var(--st-2);
   overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
 .dock::-webkit-scrollbar { display: none; }
-.step { flex: 1 0 72px; display: grid; justify-items: center; align-content: center; gap: 4px; min-height: 60px; padding: 8px 6px; border-radius: 22px;
-  color: var(--ink); font: 400 13px/1.2 var(--font); white-space: nowrap;
-  transition: background var(--t-fast) var(--ease), transform var(--t-press) var(--ease), box-shadow var(--t) var(--ease); }
-.step .i { width: 22px; height: 22px; }
-.step:hover { background: var(--st-3); }
+.step { flex: 1 0 72px; display: grid; justify-items: center; align-content: center; gap: 5px; min-height: 56px; padding: 8px 6px; border-radius: 22px;
+  color: var(--ink-2); font: 400 12px/1.2 var(--font); letter-spacing: .01em; white-space: nowrap;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease), transform var(--t-press) var(--ease), box-shadow var(--t) var(--ease); }
+.step .i { width: 20px; height: 20px; }
+.step:hover { background: var(--st-3); color: var(--ink); }
 .step:active { transform: scale(.97); }
 .step:focus-visible { outline-offset: -3px; }
-.step[aria-current="step"] { background: var(--st-5); color: var(--sel-ink); box-shadow: var(--lift-1); }
+.step[aria-current="step"] { background: var(--sel-bg); color: var(--sel-ink); font-weight: 500; box-shadow: inset 0 0 0 1px var(--sel-ring), var(--lift-1); }
 .dock-rule { flex: none; width: 1px; margin: 12px 4px; background: var(--rule); }
 
 /* ================================================================ the estimate, pinned under the inspector */
 .panel-foot { position: relative; margin: 0 12px 12px; padding: var(--s5); display: grid; gap: var(--s2); border-radius: var(--r-card); corner-shape: squircle;
   background: var(--st-3); box-shadow: var(--lift-2); }
 @supports (corner-shape: squircle) { .panel-foot { border-radius: calc(var(--r-card) * var(--sq)); } }
-.est-head, .est-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s1) var(--s3); }
-.est-row { flex-wrap: wrap; }
+.est-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s1) var(--s3); }
+/* the price owns its own track and line box: counting to a new total never moves Breakdown or the rows below */
+.est-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--s3); min-height: 36px; }
+.est-price { margin: 0; overflow: hidden; text-overflow: clip; font-feature-settings: "tnum" 1, "lnum" 1; }
 .est-live { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); }
 .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 4px color-mix(in oklab, var(--brand) 22%, transparent); flex: none; }
 @media (prefers-color-scheme: dark) { .live-dot { background: var(--p-accent-on-dark); } }
@@ -112,11 +140,11 @@ body.ws { overflow-x: clip; }
 .ws .chip-btn .i, .ws .text-btn .i { width: 16px; height: 16px; }
 .delta { position: absolute; right: var(--s5); top: -13px; z-index: 1; opacity: 0; translate: 0 6px; transition: opacity var(--t) var(--ease), translate var(--t) var(--ease); font-variant-numeric: tabular-nums; }
 .delta.show { opacity: 1; translate: 0 0; }
-.est-note { text-wrap: pretty; }
+.est-note { text-wrap: pretty; font-size: 12px; line-height: 1.45; }
 .cta-lead { margin-top: var(--s2); }
-/* short screens give the room back to the inspector; the disclaimer stays in the estimate view and the consultation sheet */
+/* short screens give the room back to the inspector, but the "not a quote" line never leaves the price */
 @media (max-height: 999px) { .cta-lead { display: none; } }
-@media (max-height: 779px) { .est-note { display: none; } .panel-foot { padding: var(--s4); } }
+@media (max-height: 779px) { .panel-foot { padding: var(--s4); gap: 6px; } }
 
 /* ================================================================ the $300M button (NOTES.md 2026-10-14) */
 .cta { position: relative; display: inline-flex; align-items: center; justify-content: space-between; gap: 14px; width: 100%; min-height: 52px; padding: 6px 6px 6px 22px;

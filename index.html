@@ -15,6 +15,7 @@
   <meta property="og:description" content="Your kitchen. Made incredible. Explore finishes in 3D with metric measurements and indicative AUD allowances.">
   <meta property="og:url" content="https://incrediblekitchens.com.au/">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect x=%226%22 y=%224%22 width=%2220%22 height=%2224%22 rx=%223%22 fill=%22%232F5E4E%22/%3E%3Cpath d=%22M16 4v24%22 stroke=%22white%22 stroke-width=%222%22/%3E%3C/svg%3E">
+  <link rel="preload" as="image" href="/kitchen-poster.webp" type="image/webp" fetchpriority="high">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&family=Cormorant:ital,wght@0,500;1,500&display=swap" rel="stylesheet">
@@ -40,7 +41,8 @@
 
     <div class="workspace">
       <section class="stage" id="stage" aria-label="3D kitchen">
-        <canvas id="scene" tabindex="0" aria-label="3D kitchen. Drag, or use the arrow keys, to look around. Choose parts with the buttons below it."></canvas>
+        <img class="stage-poster" src="/kitchen-poster.webp" alt="" width="960" height="738" decoding="async" fetchpriority="high">
+        <canvas id="scene" tabindex="0" aria-label="3D kitchen. Drag, or use the arrow keys, to look around. Plus and minus zoom. Home shows the whole kitchen. Choose parts with the buttons below it."></canvas>
         <p class="stage-fallback" id="fallback" role="status">Loading your 3D kitchen. You can already choose finishes and check your estimate.</p>
 
         <div class="stage-tools" role="group" aria-label="View">
@@ -128,6 +130,7 @@
   </dialog>
 
   <p class="ws-sr" id="live" aria-live="polite"></p>
+  <p class="ws-sr" id="sceneLive" aria-live="polite"></p>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

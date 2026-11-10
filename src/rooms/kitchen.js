@@ -47,9 +47,14 @@ function makeMaterials() {
     skyTop: new THREE.MeshBasicMaterial({ color: '#9CC1E2', side: THREE.BackSide, toneMapped: false }),
     skyLow: new THREE.MeshBasicMaterial({ color: '#8DB17C', side: THREE.BackSide, toneMapped: false }),
     none: new THREE.MeshBasicMaterial({ visible: false }),
-    catcher: new THREE.ShadowMaterial({ opacity: 0.16 }),
+    catcher: new THREE.ShadowMaterial({ opacity: 0.22 }),
+    contact: new THREE.MeshBasicMaterial({ map: TX.contactTex(), color: '#000000', transparent: true, opacity: 0.34, depthWrite: false }),
+    // window glass: clear, with a reflection of the room rather than a tint
+    pane: phys({ color: '#FFFFFF', roughness: 0.02, transparent: true, opacity: 0.16, envMapIntensity: 1.6, depthWrite: false }),
+    skyNight: new THREE.MeshBasicMaterial({ map: TX.skyTex(true), transparent: true, opacity: 0, depthWrite: false, toneMapped: false }),
+    halo: new THREE.SpriteMaterial({ map: TX.glowTex(), color: WARM, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }),
   };
-  for (const k of ['glass', 'led', 'bulb', 'sky', 'skySide', 'skyTop', 'skyLow', 'none']) M[k].userData.noShadow = true;
+  for (const k of ['glass', 'led', 'bulb', 'sky', 'skySide', 'skyTop', 'skyLow', 'none', 'pane', 'skyNight']) M[k].userData.noShadow = true;
   return M;
 }
 
@@ -202,6 +207,10 @@ export function buildKitchen() {
   const catcher = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), M.catcher);
   catcher.rotation.x = -Math.PI / 2; catcher.position.y = -0.061; catcher.receiveShadow = true;
   root.add(catcher);
+  // a soft contact shadow under the floor slab, so the model sits on the table instead of floating
+  const contact = new THREE.Mesh(new THREE.PlaneGeometry(5.62 / 0.6, 4.62 / 0.6), M.contact);
+  contact.rotation.x = -Math.PI / 2; contact.position.set(0.09, -0.0606, -0.01); contact.renderOrder = 1;
+  root.add(contact);
 
   const W = new THREE.Group();
   W.add(boxFT(-2.72, 0, -2.32, -0.7, 2.6, -2.2, M.wall));
@@ -216,11 +225,25 @@ export function buildKitchen() {
   W.add(boxFT(-0.72, 1.12, -2.3, 0.72, 1.15, -2.23, M.frame));
   W.add(boxFT(-0.015, 1.12, -2.3, 0.015, 2.2, -2.24, M.frame));
   W.add(boxFT(-0.76, 1.1, -2.27, 0.76, 1.125, -2.17, M.sill));
+  const glazing = mesh(planeGeo(1.36, 1.04), M.pane, { cast: false, receive: false });
+  glazing.position.set(0, 1.67, -2.262);
+  W.add(glazing);
   bakeInto(G.walls, W);
-  // the view outside: a box behind the opening, seen from inside only
+  const pane = G.walls.children.find((child) => child.material === M.pane);
+  // the view outside: a box behind the opening, seen from inside only; the evening view fades in over the day one
   const well = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.08, 0.58), [M.skySide, M.skySide, M.skyTop, M.skyLow, M.none, M.sky]);
   well.position.set(0, 1.66, -2.61);
   root.add(well);
+  const nightSky = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.08), M.skyNight);
+  nightSky.position.set(0, 1.66, -2.895); nightSky.visible = false;
+  root.add(nightSky);
+  // glass, glow and the view outside are left out of the ambient occlusion pass (see stage.js)
+  const aoHidden = [];
+  let halos = [];
+  function refreshAoHidden() {
+    aoHidden.length = 0;
+    aoHidden.push(pane, well, nightSky, catcher, contact, ...halos, ...G.pendants.children.filter((child) => child.material === M.glass));
+  }
 
   // ---------------------------------------------------------------- cabinet boxes (carcass)
   const C = new THREE.Group();
@@ -426,8 +449,10 @@ export function buildKitchen() {
   function rebuildPendants(look) {
     const P = new THREE.Group();
     for (const light of pendantLights) { lights.remove(light); light.dispose(); }
-    pendantLights = [];
+    for (const halo of halos) lights.remove(halo);
+    pendantLights = []; halos = [];
     const top = 2.6;
+    P.add(boxFT(-2.6, top - 0.008, -0.13, 0.95, top + 0.008, -0.11, M.rod));   // the rail the pendants hang from
     M.rod.color.set(look.finish === 'black' ? '#1C1C1D' : '#C9A35B');
     M.rod.roughness = look.finish === 'black' ? 0.55 : 0.35;
     M.rod.metalness = look.finish === 'black' ? 0.4 : 1;
@@ -462,8 +487,11 @@ export function buildKitchen() {
       const bulb = mesh(new THREE.SphereGeometry(0.028, 16, 12), M.bulb, { cast: false }); bulb.position.set(x, bulbY, z); P.add(bulb);
       const pl = new THREE.PointLight(WARM, 0, 0, 2); pl.position.set(x, bulbY - 0.04, z); pl.userData.pendant = true;
       lights.add(pl); pendantLights.push(pl);
+      const halo = new THREE.Sprite(M.halo); halo.position.set(x, bulbY, z); halo.scale.setScalar(0.7);
+      lights.add(halo); halos.push(halo);
     }
     bakeInto(G.pendants, P);
+    refreshAoHidden();
     applyNight();
   }
 
@@ -537,7 +565,7 @@ export function buildKitchen() {
     }
     if (changed('appFinish', ap.package.finish)) {
       const black = ap.package.finish === 'black';
-      M.steel.color.set(black ? '#3B3C3F' : '#D9DCDE'); M.steel.roughness = black ? 0.36 : 0.36; M.steel.metalness = black ? 0.8 : 0.85;
+      M.steel.color.set(black ? '#3B3C3F' : '#D9DCDE'); M.steel.roughness = black ? 0.4 : 0.36; M.steel.metalness = black ? 0.8 : 0.85;
     }
     if (changed('hw', hw.finish)) {
       const h = hw.finish; M.metal.color.set(h.metal); M.metal.roughness = h.roughness; M.metal.metalness = h.dark ? 0.25 : 1;
@@ -553,30 +581,32 @@ export function buildKitchen() {
   ];
   function applyNight() {
     const t = state.night;
-    M.bulb.emissiveIntensity = t * 8;
-    M.glass.emissiveIntensity = t * 0.35; M.glass.opacity = 0.3 + t * 0.25;
-    M.shadeIn.emissiveIntensity = t * 0.9;
-    M.linen.emissiveIntensity = t * 0.75;
-    M.led.emissiveIntensity = state.led ? t * 5 : 0;
-    pendantLights.forEach((l) => { l.intensity = t * 2.4; });
-    rectLights.forEach((l) => { l.intensity = state.led ? t * 7 : 0; });
-    M.sky.map = TX.skyTex(t > 0.5);
+    M.bulb.emissiveIntensity = t * 9;
+    M.glass.emissiveIntensity = t * 0.5; M.glass.opacity = 0.28 + t * 0.3;
+    M.shadeIn.emissiveIntensity = t * 1.4;
+    M.linen.emissiveIntensity = t * 0.9;
+    M.led.emissiveIntensity = state.led ? t * 6 : 0;
+    M.halo.opacity = t * 0.5;
+    pendantLights.forEach((l) => { l.intensity = t * 3.4; });
+    rectLights.forEach((l) => { l.intensity = state.led ? t * 8 : 0; });
+    M.skyNight.opacity = t; nightSky.visible = t > 0.001;
     skyColours.forEach(([material, day, night]) => material.color.copy(day).lerp(night, t));
   }
   function setNight(t) { state.night = t; applyNight(); }
 
   // ---------------------------------------------------------------- camera views (position, target)
+  // One named shot per step. The name is announced to screen readers when the camera goes there.
   const views = {
-    home: { pos: [3.15, 2.75, 4.7], target: [-0.45, 0.95, -0.75] },
-    cabinets: { pos: [2.1, 2.2, 3.1], target: [-0.9, 1.2, -1.5] },
-    countertops: { pos: [1.7, 2.35, 2.1], target: [-0.3, 0.9, -1.0] },
-    backsplash: { pos: [0.75, 1.6, 0.9], target: [-0.35, 1.2, -2.2] },
-    island: { pos: [2.2, 1.75, 3.0], target: [0.2, 0.75, -0.15] },
-    lighting: { pos: [2.0, 1.45, 2.9], target: [0.2, 1.65, -0.2] },
-    flooring: { pos: [2.6, 3.3, 3.5], target: [-0.2, 0.0, -0.3] },
-    appliances: { pos: [1.5, 1.75, 2.5], target: [-2.1, 1.0, -0.1] },
-    hardware: { pos: [0.95, 1.45, 0.45], target: [-0.35, 0.85, -1.6] },
-    walls: { pos: [3.0, 2.1, 4.2], target: [-0.6, 1.5, -1.2] },
+    home: { name: 'Whole kitchen', pos: [4.1, 3.5, 6.3], target: [-0.05, 1.12, -0.35] },
+    cabinets: { name: 'Cabinets, back and left runs', pos: [2.25, 2.15, 3.2], target: [-0.85, 1.18, -1.5] },
+    countertops: { name: 'Benchtops from above the island', pos: [1.75, 2.4, 2.15], target: [-0.3, 0.9, -1.0] },
+    backsplash: { name: 'Splashback behind the sink', pos: [0.8, 1.58, 0.95], target: [-0.35, 1.2, -2.2] },
+    island: { name: 'Island and stools', pos: [2.3, 1.75, 3.1], target: [0.2, 0.75, -0.15] },
+    lighting: { name: 'Pendants over the island', pos: [2.05, 1.5, 3.0], target: [0.2, 1.62, -0.2] },
+    flooring: { name: 'Floor from above', pos: [2.7, 3.45, 3.6], target: [-0.2, 0.0, -0.3] },
+    appliances: { name: 'Cooker, rangehood and fridge', pos: [1.55, 1.75, 2.55], target: [-2.1, 1.0, -0.1] },
+    hardware: { name: 'Handles and tapware at the sink', pos: [0.95, 1.45, 0.5], target: [-0.35, 0.85, -1.6] },
+    walls: { name: 'Walls and window', pos: [3.1, 2.1, 4.3], target: [-0.6, 1.5, -1.2] },
   };
 
   let disposed = false;
@@ -593,5 +623,5 @@ export function buildKitchen() {
     root.clear();
   }
 
-  return { root, partObjects, applyLooks, setNight, views, dispose };
+  return { root, partObjects, aoHidden, applyLooks, setNight, views, dispose };
 }
