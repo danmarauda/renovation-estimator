@@ -61,6 +61,7 @@ Every camera move can be interrupted by the user's own drag, wheel or keys. With
 ## Interface
 
 - The step dock, the single inspector and the pinned estimate stay. They share one surface ramp and one radius family.
+- The dock is icons only. The selected step opens to show its name; the others name themselves in a tooltip with a mouse and always for screen readers. On a desktop the dock floats over the lower edge of the kitchen and takes the Day or Evening overlay colours; on a phone it is a row under the kitchen, and a rail on the left when the phone is on its side.
 - Selected states use a raised surface and ink, not a second accent.
 - Focus rings are 2.5 px in the focus token with an offset, on every control and on the canvas.
 - Touch targets are at least 44 px.

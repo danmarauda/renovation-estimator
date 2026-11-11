@@ -114,7 +114,7 @@ button.bd-row:active { transform: scale(.985); }
 
   .dock { gap: 6px; padding: var(--s2) 34px var(--s2) 10px; border-radius: 0; background: none; scroll-padding-inline: 10px;
     -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); }
-  .step { flex: 0 0 auto; min-width: 72px; min-height: 52px; background: var(--st-2); }
+  .step { background: var(--st-2); }
   .dock-rule { margin: 10px 2px; }
 
   /* the estimate bar on a phone: the price, the "not a quote" line, then the one action. The size is the first step in the dock. */
@@ -165,7 +165,11 @@ button.bd-row:active { transform: scale(.985); }
     .dock { grid-column: 1; grid-row: 1 / 3; z-index: 1; flex-direction: column; align-items: stretch; gap: 2px; width: 72px; padding: 4px 4px 26px; border-radius: 20px; background: var(--st-2);
       overflow: hidden auto; overscroll-behavior: contain; scroll-padding: 4px 0 26px;
       -webkit-mask-image: linear-gradient(#000 calc(100% - 24px), transparent); mask-image: linear-gradient(#000 calc(100% - 24px), transparent); }
-    .step { flex: 0 0 auto; min-width: 0; min-height: 48px; padding: 6px 2px; gap: 3px; border-radius: 16px; background: none; }
+    /* in the rail the name opens under its icon instead of beside it */
+    .step { grid-template-columns: minmax(0, 1fr); grid-template-rows: 18px 0fr; justify-items: center; align-content: center; height: auto; min-height: 44px; padding: 0 2px;
+      border-radius: 16px; background: none; font-size: 12px; letter-spacing: 0; }
+    .step > span { max-width: 100%; }
+    .step[aria-current="step"] { grid-template-columns: minmax(0, 1fr); grid-template-rows: 18px 1fr; gap: 3px 0; padding: 7px 0; }
     .step .i { width: 18px; height: 18px; }
     .dock-rule { width: auto; height: 1px; margin: 2px 12px; }
 

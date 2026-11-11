@@ -22,7 +22,7 @@ export function createPanel({ room, state, reducedMotion, on }) {
   ];
   const stepOf = (id) => steps.find((s) => s.id === id) || steps[0];
   const rule = '<span class="dock-rule" aria-hidden="true"></span>';
-  el.dock.innerHTML = steps.map((s, i) => `${i === 1 || i === steps.length - 1 ? rule : ''}<button class="step" type="button" data-step="${esc(s.id)}" aria-controls="inspector">${icon(s.icon)}<span>${esc(s.name)}</span></button>`).join('');
+  el.dock.innerHTML = steps.map((s, i) => `${i === 1 || i === steps.length - 1 ? rule : ''}<button class="step" type="button" data-step="${esc(s.id)}" aria-controls="inspector" aria-label="${esc(s.name)}">${icon(s.icon)}<span>${esc(s.name)}</span></button>`).join('');
   el.dock.addEventListener('click', (e) => { const b = e.target.closest('[data-step]'); if (b) on.selectStep(b.dataset.step, 'dock'); });
   const partUnder = (target) => { const b = target.closest('[data-step]'); return b && stepOf(b.dataset.step).part ? b.dataset.step : null; };
   for (const type of ['pointerover', 'focusin']) el.dock.addEventListener(type, (e) => on.previewPart(partUnder(e.target)));
@@ -48,6 +48,10 @@ export function createPanel({ room, state, reducedMotion, on }) {
     turnFrame = requestAnimationFrame(() => centreInDock(el.dock.querySelector('[aria-current="step"]')));
   }
   turned.addEventListener('change', onTurn);
+  // the selected step grows to show its name, which moves its neighbours, so it is centred again once it has opened
+  el.dock.addEventListener('transitionend', (e) => {
+    if (e.propertyName.startsWith('grid-template') && e.target.matches('[aria-current="step"]')) centreInDock(e.target);
+  });
   function setStepButton(button, step, label, name) {
     button.hidden = !step;
     if (!step) return;
