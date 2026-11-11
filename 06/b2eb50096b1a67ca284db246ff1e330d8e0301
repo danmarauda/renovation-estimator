@@ -1,0 +1,20 @@
+docs/art-direction.md
+  h_952ed2f92a4b0d 64
+src/styles/app.css
+  h_952ed2f92a4b0d 43,60,62,106-109,112-116,121-157
+src/styles/panel.css
+  h_952ed2f92a4b0d 117,168-172
+src/ui/panel.js
+  h_952ed2f92a4b0d 25,51-54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "06b2eb50096b1a67ca284db246ff1e330d8e0301",
+  "prompts": {},
+  "humans": {
+    "h_952ed2f92a4b0d": {
+      "author": "danmarauda <143896437+danmarauda@users.noreply.github.com>"
+    }
+  }
+}
