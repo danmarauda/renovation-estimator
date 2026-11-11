@@ -68,7 +68,9 @@ function setSceneAvailability(available, message = 'The 3D view is reconnecting.
 setSceneAvailability(false, 'Loading your 3D kitchen. You can already choose finishes and check your estimate.');
 
 // ------------------------------------------------------------------ panel
-const isPhone = () => matchMedia('(max-width: 999px)').matches;
+// The stacked phone layout scrolls the page to the inspector. A phone on its side is a fixed workspace (panel.css), so nothing needs to scroll.
+const sideways = CSS.supports('grid-template-columns', 'subgrid') ? '(orientation: landscape) and (max-height: 540px) and (min-width: 540px)' : 'not all';
+const isPhone = () => matchMedia('(max-width: 999px)').matches && !matchMedia(sideways).matches;
 const panel = createPanel({
   room, state, reducedMotion,
   on: {

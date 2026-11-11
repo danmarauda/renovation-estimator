@@ -136,3 +136,111 @@ button.bd-row:active { transform: scale(.985); }
   .delta { right: 18px; }
 }
 @media (max-width: 380px) { .opts { grid-template-columns: minmax(0, 1fr); } }
+
+/* ================================================================ a phone on its side (and any short, wide window): nothing scrolls but the
+   inspector. The steps become a rail on the left, the kitchen takes the full height beside it, the inspector sits on the right, and the
+   estimate is one bar along the bottom. The panel is a subgrid over the whole workspace, so the bar sets its own row height.
+   Every value is restated here because this layout replaces both the stacked phone layout and the desktop one. */
+@media (orientation: landscape) and (max-height: 540px) and (min-width: 540px) {
+  @supports (grid-template-columns: subgrid) {
+    :root { --panel-w: clamp(260px, 42vw, 380px); }
+    .app { display: grid; grid-template-columns: auto minmax(0, 1fr) var(--panel-w); grid-template-rows: minmax(0, 1fr) auto auto; gap: 6px; height: 100dvh;
+      padding: 6px max(6px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left)); }
+    .workspace { display: contents; }
+
+    /* the brand is the mark in the corner of the stage; its name and the page title stay for screen readers */
+    .masthead { grid-column: 2; grid-row: 1 / 3; justify-self: start; align-self: start; position: relative; z-index: 6; display: block; padding: 8px; pointer-events: none; }
+    .masthead .brand-txt, .masthead .intro, .masthead .call span, .stage .t, .est-head { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    .logo { width: 36px; height: 36px; font-size: 13px; }
+    .brand .call { width: 44px; padding: 0; pointer-events: auto; }
+
+    /* the kitchen */
+    .stage { grid-column: 2; grid-row: 1 / 3; z-index: 1; height: auto; border-radius: 20px; }
+    .stage-tools { top: 8px; right: 8px; left: auto; max-width: calc(100% - 60px); flex-wrap: wrap; gap: 4px; }
+    .stage-tools .time-seg { margin-right: 0; padding: 2px; }
+    .stage .tool, .time-seg .fg-pill { width: 44px; min-height: 44px; padding: 0; }
+    .stage-hint { left: 8px; bottom: 8px; max-width: calc(100% - 16px); padding: 7px 12px; border-radius: 16px; font-size: 12px; line-height: 1.3; }
+
+    /* the steps: a rail that scrolls down its own length */
+    .dock { grid-column: 1; grid-row: 1 / 3; z-index: 1; flex-direction: column; align-items: stretch; gap: 2px; width: 72px; padding: 4px 4px 26px; border-radius: 20px; background: var(--st-2);
+      overflow: hidden auto; overscroll-behavior: contain; scroll-padding: 4px 0 26px;
+      -webkit-mask-image: linear-gradient(#000 calc(100% - 24px), transparent); mask-image: linear-gradient(#000 calc(100% - 24px), transparent); }
+    .step { flex: 0 0 auto; min-width: 0; min-height: 48px; padding: 6px 2px; gap: 3px; border-radius: 16px; background: none; }
+    .step .i { width: 18px; height: 18px; }
+    .dock-rule { width: auto; height: 1px; margin: 2px 12px; }
+
+    /* the inspector and its two step buttons */
+    .panel { grid-column: 1 / -1; grid-row: 1 / -1; display: grid; grid-template-columns: subgrid; grid-template-rows: subgrid; padding: 0; min-height: 0; }
+    .panel-body { grid-column: 3; grid-row: 1; overflow-y: auto; padding: 6px 6px 16px; scroll-margin-top: 0;
+      -webkit-mask-image: linear-gradient(#000 calc(100% - 16px), transparent); mask-image: linear-gradient(#000 calc(100% - 16px), transparent); }
+    .view { gap: 10px; }
+    .view-head { grid-template-columns: minmax(0, 1fr); }
+    .view-head .ws-ico { display: none; }
+    .view-head .ws-title { font-size: 18px; }
+    .view-head .ws-cap { font-size: 12px; }
+    .view-head .ws-cap:empty { display: none; }
+    /* a part's heading shares its line with that part's price */
+    .options { grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--s3); }
+    .options > .view-head, .options > .view-head > div { display: contents; }
+    .options .view-head .ws-title { grid-column: 1; grid-row: 1; align-self: center; }
+    .options .view-head .ws-cap { grid-column: 1 / -1; grid-row: 2; margin-top: -6px; }
+    .options .opt-price { grid-column: 2; grid-row: 1; display: grid; justify-items: end; gap: 1px; padding: 0; border-radius: 0; background: none; }
+    .options .opt-price .ws-cap { font-size: 12px; line-height: 1.2; }
+    .options .opt-price strong { font-size: 15px; }
+    .options .group { grid-column: 1 / -1; }
+    .group legend { padding-bottom: var(--s1); }
+    .opts, .size-opts { gap: 6px; }
+    .opt { grid-template-columns: 32px minmax(0, 1fr); gap: var(--s2); min-height: 48px; padding: 6px 8px 6px 6px; border-radius: 16px; }
+    .opt .nm { font-size: 13px; }
+    .opt .ok { top: 4px; right: 4px; width: 18px; height: 18px; }
+    .sw { width: 32px; height: 32px; }
+    .sw.ic .i { width: 20px; height: 20px; }
+    .size-opts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .size-opts .opt { grid-template-columns: minmax(0, 1fr); padding: 6px 8px; }
+    .size-opts .pr { text-wrap: balance; }
+    .size-opts .sw { display: none; }
+    .measurements, .measurements .ws-cap, #sizeNote { font-size: 13px; line-height: 1.45; }
+    .bd-row { min-height: 44px; padding: 6px 12px; border-radius: 14px; }
+    .bd-total { font-size: 14px; }
+    .bd-total strong { font-size: 18px; }
+    .stepper { grid-column: 3; grid-row: 2; padding: 0; }
+    .stepper .ws-btn { padding: 0 var(--s3); font-size: 13px; }
+    .stepper .ws-btn.ghost { padding-left: var(--s1); }
+    .stepper .ws-btn.quiet { padding-right: var(--s2); }
+
+    /* the estimate: the price and its one action on a line, the "not a quote" line directly under the price */
+    .panel-foot { grid-column: 1 / -1; grid-row: 3; position: relative; inset: auto; z-index: auto; margin: 0; padding: 6px 6px 6px 14px; display: grid;
+      grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "row cta" "note note"; align-items: center; gap: 2px var(--s3); border-radius: 22px;
+      background: var(--st-3); -webkit-backdrop-filter: none; backdrop-filter: none; }
+    .est-head .chip-btn { display: none; }
+    .est-row { grid-area: row; min-height: 44px; padding: 0; }
+    .est-price { font-size: 20px; }
+    .text-btn { min-height: 44px; font-size: 13px; }
+    .est-note { grid-area: note; margin: 0; padding: 0 8px 2px 0; }
+    .cta-lead { display: none; }
+    .cta { grid-area: cta; width: auto; min-height: 44px; padding: 4px 4px 4px 16px; gap: 10px; font-size: 14px; }
+    .cta-dot { width: 36px; height: 36px; }
+    .delta { top: -12px; right: auto; left: 14px; }
+
+    @supports (corner-shape: squircle) {
+      .stage { border-radius: 30px; }
+      .panel-foot { border-radius: 30px; }
+    }
+
+    /* the sheet is centred and sized to the short screen */
+    .ws-sheet.consult { --fg-r: 24px; width: min(100% - 24px, 620px); max-height: calc(100dvh - 16px); margin: auto; padding: var(--s3) var(--s4) var(--s4); }
+    .consult .grab { display: none; }
+    .consult-content { gap: 10px; padding-top: 0; }
+    .consult .close { top: 8px; right: 8px; }
+    .consult .ws-display { display: flex; align-items: center; min-height: 40px; font-size: 22px; }
+    .consult .ws-btn.big { min-height: 44px; font-size: 14px; }
+  }
+}
+/* wide enough for the "not a quote" line to sit between the price and the action */
+@media (orientation: landscape) and (max-height: 540px) and (min-width: 1000px) {
+  @supports (grid-template-columns: subgrid) {
+    .panel-foot { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "row note cta"; gap: var(--s4); }
+    .est-row { gap: var(--s4); }
+    .est-note { padding: 0; }
+  }
+}

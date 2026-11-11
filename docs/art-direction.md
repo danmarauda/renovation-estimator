@@ -64,6 +64,7 @@ Every camera move can be interrupted by the user's own drag, wheel or keys. With
 - Selected states use a raised surface and ink, not a second accent.
 - Focus rings are 2.5 px in the focus token with an offset, on every control and on the canvas.
 - Touch targets are at least 44 px.
+- A phone on its side (landscape, 540 px high or less) is a fixed workspace, not a shrunk page: the steps are a rail on the left, the kitchen takes the full height, the inspector is on the right and is the only thing that scrolls, and the estimate is one bar along the bottom with the "not a quote" line under the price. The brand is the mark in the corner of the stage; the name and page title stay for screen readers. Stage controls are icon only. Side and bottom safe areas are respected.
 
 ## Voice
 

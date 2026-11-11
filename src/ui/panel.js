@@ -30,10 +30,24 @@ export function createPanel({ room, state, reducedMotion, on }) {
   for (const b of [el.prev, el.next]) b.addEventListener('click', () => on.selectStep(b.dataset.step, 'stepper'));
   for (const b of [el.sizeBtn, el.breakdownBtn]) b.addEventListener('click', () => on.selectStep(b.dataset.step, 'shortcut'));
 
+  // the dock scrolls sideways under the kitchen and downwards as the rail of a phone on its side
   function centreInDock(button) {
-    if (el.dock.scrollWidth <= el.dock.clientWidth) return;
-    el.dock.scrollTo({ left: button.offsetLeft - (el.dock.clientWidth - button.offsetWidth) / 2, behavior: reducedMotion ? 'auto' : 'smooth' });
+    const dock = el.dock;
+    if (!button || (dock.scrollWidth <= dock.clientWidth && dock.scrollHeight <= dock.clientHeight)) return;
+    dock.scrollTo({
+      left: button.offsetLeft - (dock.clientWidth - button.offsetWidth) / 2,
+      top: button.offsetTop - (dock.clientHeight - button.offsetHeight) / 2,
+      behavior: reducedMotion ? 'auto' : 'smooth',
+    });
   }
+  // turning the phone swaps the dock's direction, so the active step is brought back into view once the new layout exists
+  const turned = matchMedia('(orientation: landscape)');
+  let turnFrame = 0;
+  function onTurn() {
+    cancelAnimationFrame(turnFrame);
+    turnFrame = requestAnimationFrame(() => centreInDock(el.dock.querySelector('[aria-current="step"]')));
+  }
+  turned.addEventListener('change', onTurn);
   function setStepButton(button, step, label, name) {
     button.hidden = !step;
     if (!step) return;
@@ -185,6 +199,9 @@ export function createPanel({ room, state, reducedMotion, on }) {
     isPart: (id) => !!stepOf(id).part && stepOf(id).id === id,
     focusHeading() { const step = stepOf(state.active); $(step.heading, step.view)?.focus({ preventScroll: true }); },
     get totals() { return totals(room, state.choices, state.size); },
-    dispose() { cancelAnimationFrame(raf); clearTimeout(deltaTimer); clearTimeout(liveTimer); },
+    dispose() {
+      cancelAnimationFrame(raf); cancelAnimationFrame(turnFrame); clearTimeout(deltaTimer); clearTimeout(liveTimer);
+      turned.removeEventListener('change', onTurn);
+    },
   };
 }

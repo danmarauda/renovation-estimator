@@ -37,7 +37,7 @@ html, body { height: 100%; }
 [hidden] { display: none !important; }
 button:disabled { cursor: not-allowed; opacity: .55; }
 body.ws { overflow-x: clip; }
-#live { top: 0; left: 0; }   /* pinned, or its 1px box after the full-height app makes the page scroll by a pixel */
+#live, #sceneLive { top: 0; left: 0; }   /* pinned, or their 1px boxes after the full-height app make the page scroll by a pixel */
 
 /* ================================================================ layout
    Left: the kitchen with its step dock underneath. Right: the brand, the inspector for the active step,
