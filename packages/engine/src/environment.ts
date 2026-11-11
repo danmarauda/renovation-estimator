@@ -1,22 +1,28 @@
 // Image-based light, drawn in code so it matches this room: no HDR download.
 // Two moods are captured once each and prefiltered (PMREM). Sources are brighter than 1 on purpose (HDR).
 import * as THREE from 'three';
+import { isMesh } from './geo.ts';
 
 const WARM = '#FFC98A';
 
-function emitter(hex, strength) {
+export interface LightStudio {
+  day: THREE.WebGLRenderTarget;
+  evening: THREE.WebGLRenderTarget;
+}
+
+function emitter(hex: string, strength: number) {
   return new THREE.MeshBasicMaterial({ color: new THREE.Color(hex).multiplyScalar(strength), toneMapped: false, side: THREE.DoubleSide });
 }
 
 // The capture point is the middle of the room at eye height; the shell stands in for walls, ceiling and floor bounce.
-function buildMood(evening) {
+function buildMood(evening: boolean) {
   const scene = new THREE.Scene();
-  const add = (geometry, material, x, y, z, rx = 0, ry = 0) => {
+  const add = (geometry: THREE.BufferGeometry, material: THREE.Material | THREE.Material[], x: number, y: number, z: number, rx = 0, ry = 0) => {
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set(x, y, z); mesh.rotation.set(rx, ry, 0);
     scene.add(mesh);
   };
-  const shell = (hex, k) => new THREE.MeshBasicMaterial({ color: new THREE.Color(hex).multiplyScalar(k), side: THREE.BackSide, toneMapped: false });
+  const shell = (hex: string, k: number) => new THREE.MeshBasicMaterial({ color: new THREE.Color(hex).multiplyScalar(k), side: THREE.BackSide, toneMapped: false });
   const walls = evening ? shell('#3A2C22', 0.035) : shell('#EFE9DF', 0.72);
   const ceiling = evening ? shell('#3A2C22', 0.05) : shell('#FFF7EC', 0.95);
   const floor = evening ? shell('#4A3524', 0.06) : shell('#B9966C', 0.34);
@@ -37,24 +43,24 @@ function buildMood(evening) {
   return scene;
 }
 
-function disposeScene(scene) {
+function disposeScene(scene: THREE.Scene) {
   scene.traverse((object) => {
-    object.geometry?.dispose();
-    for (const material of [].concat(object.material || [])) material.dispose();
+    if (!isMesh(object)) return;
+    object.geometry.dispose();
+    for (const material of Array.isArray(object.material) ? object.material : [object.material]) material.dispose();
   });
 }
 
 // Returns { day, evening } render targets. The caller owns them and disposes them.
-export function captureLightStudio(renderer, { size = 256 } = {}) {
+export function captureLightStudio(renderer: THREE.WebGLRenderer, { size = 256 }: { size?: number } = {}): LightStudio {
   const pmrem = new THREE.PMREMGenerator(renderer);
-  const out = {};
+  const capture = (evening: boolean) => {
+    const scene = buildMood(evening);
+    try { return pmrem.fromScene(scene, 0.03, 0.1, 30, { size }); } finally { disposeScene(scene); }
+  };
   try {
-    for (const [name, evening] of [['day', false], ['evening', true]]) {
-      const scene = buildMood(evening);
-      try { out[name] = pmrem.fromScene(scene, 0.03, 0.1, 30, { size }); } finally { disposeScene(scene); }
-    }
+    return { day: capture(false), evening: capture(true) };
   } finally {
     pmrem.dispose();
   }
-  return out;
 }

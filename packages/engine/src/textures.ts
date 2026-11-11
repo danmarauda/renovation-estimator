@@ -1,36 +1,48 @@
 // Procedural textures, drawn on canvases at run time. No image files, no downloaded models.
-// Every texture is seamless and sized in metres: geometry UVs are in metres (see geo.js), so
+// Every texture is seamless and sized in metres: geometry UVs are in metres (see geo.ts), so
 // texture.repeat = 1 / (metres the canvas covers).
 import * as THREE from 'three';
 
-const cache = new Map();
+export interface TileSet {
+  map: THREE.CanvasTexture;
+  bump: THREE.CanvasTexture | null;
+}
+
+type Context = CanvasRenderingContext2D;
+type Random = () => number;
+type Point = [x: number, y: number];
+
+const textures = new Map<string, THREE.CanvasTexture>();
+const tileSets = new Map<string, TileSet>();
 let maxAniso = 4;
-export function setAnisotropy(n) { maxAniso = Math.min(8, n || 4); }
+export function setAnisotropy(n: number) { maxAniso = Math.min(8, n || 4); }
 export function disposeTextures() {
-  const textures = new Set();
-  for (const value of cache.values()) {
-    for (const texture of value?.isTexture ? [value] : Object.values(value || {})) {
-      if (texture?.isTexture) textures.add(texture);
-    }
-  }
-  textures.forEach((texture) => texture.dispose());
-  cache.clear();
+  for (const texture of textures.values()) texture.dispose();
+  for (const { map, bump } of tileSets.values()) { map.dispose(); bump?.dispose(); }
+  textures.clear();
+  tileSets.clear();
 }
 
-function memo(key, make) {
-  if (!cache.has(key)) cache.set(key, make());
-  return cache.get(key);
+function memo(key: string, make: () => THREE.CanvasTexture) {
+  let texture = textures.get(key);
+  if (!texture) { texture = make(); textures.set(key, texture); }
+  return texture;
 }
 
-function rng(seed) {
+function rng(seed: number): Random {
   let s = (seed * 2654435761) >>> 0 || 1;
   return () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
 }
-function hashSeed(str) { let h = 2166136261; for (const c of str) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; }
+function hashSeed(str: string) { let h = 2166136261; for (const c of str) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; }
 
-function canvas(w, h = w) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+function canvas(w: number, h = w) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+function context(c: HTMLCanvasElement) {
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('A 2D canvas context is unavailable');
+  return ctx;
+}
 
-function toTex(c, metres, srgb = true) {
+function toTex(c: HTMLCanvasElement, metres: number, srgb = true) {
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.anisotropy = maxAniso;
@@ -40,21 +52,21 @@ function toTex(c, metres, srgb = true) {
 }
 
 // ---------------------------------------------------------------- colour helpers
-function hexRgb(hex) { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
-function rgbStr([r, g, b], a = 1) { return `rgba(${r | 0},${g | 0},${b | 0},${a})`; }
-function shade(hex, k, a = 1) {              // k > 0 lightens toward white, k < 0 darkens toward black
+function hexRgb(hex: string) { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function rgbStr([r, g, b]: number[], a = 1) { return `rgba(${r | 0},${g | 0},${b | 0},${a})`; }
+function shade(hex: string, k: number, a = 1) {              // k > 0 lightens toward white, k < 0 darkens toward black
   const c = hexRgb(hex);
   const t = k >= 0 ? 255 : 0, f = Math.abs(k);
   return rgbStr(c.map((v) => v + (t - v) * f), a);
 }
 
 // draw something 9 times so it wraps across all edges (seamless tiling)
-function wrapped(ctx, W, H, fn) {
+function wrapped(ctx: Context, W: number, H: number, fn: () => void) {
   for (const dx of [-W, 0, W]) for (const dy of [-H, 0, H]) { ctx.save(); ctx.translate(dx, dy); fn(); ctx.restore(); }
 }
 
 // ---------------------------------------------------------------- wood (grain runs along canvas Y)
-function drawGrain(ctx, x0, y0, w, h, base, grain, r, density = 1) {
+function drawGrain(ctx: Context, x0: number, y0: number, w: number, h: number, base: string, grain: string, r: Random, density = 1) {
   ctx.save();
   ctx.beginPath(); ctx.rect(x0, y0, w, h); ctx.clip();
   ctx.fillStyle = base; ctx.fillRect(x0, y0, w, h);
@@ -86,9 +98,9 @@ function drawGrain(ctx, x0, y0, w, h, base, grain, r, density = 1) {
   ctx.restore();
 }
 
-export function woodTex({ base, grain }, { across = false } = {}) {
+export function woodTex({ base, grain }: { base: string; grain: string }, { across = false }: { across?: boolean } = {}) {
   return memo(`wood:${base}:${grain}:${across}`, () => {
-    const c = canvas(1024), ctx = c.getContext('2d'), r = rng(hashSeed(base + grain));
+    const c = canvas(1024), ctx = context(c), r = rng(hashSeed(base + grain));
     drawGrain(ctx, 0, 0, 1024, 1024, base, grain, r, 1.4);
     const t = toTex(c, 0.9);
     if (across) { t.center.set(0.5, 0.5); t.rotation = Math.PI / 2; }
@@ -97,9 +109,9 @@ export function woodTex({ base, grain }, { across = false } = {}) {
 }
 
 // butcher block: strips of wood running along X
-export function butcherTex({ base, grain }) {
+export function butcherTex({ base, grain }: { base: string; grain: string }) {
   return memo(`butcher:${base}:${grain}`, () => {
-    const W = 1024, c = canvas(W), ctx = c.getContext('2d'), r = rng(hashSeed('bb' + base));
+    const W = 1024, c = canvas(W), ctx = context(c), r = rng(hashSeed('bb' + base));
     const strips = 16, sw = W / strips;
     for (let i = 0; i < strips; i++) {
       const tone = shade(base, (r() - 0.5) * 0.22);
@@ -113,7 +125,7 @@ export function butcherTex({ base, grain }) {
 }
 
 // ---------------------------------------------------------------- stone
-function clouds(ctx, W, H, base, r, n, strength) {
+function clouds(ctx: Context, W: number, H: number, base: string, r: Random, n: number, strength: number) {
   for (let i = 0; i < n; i++) {
     const x = r() * W, y = r() * H, rad = 60 + r() * W * 0.35;
     const k = r() < 0.55 ? -strength * (0.5 + r()) : strength * (0.4 + r());
@@ -126,10 +138,10 @@ function clouds(ctx, W, H, base, r, n, strength) {
     });
   }
 }
-function vein(ctx, W, H, color, r, len, width, start) {
-  const pts = []; let x = start ? start[0] : r() * W, y = start ? start[1] : r() * H, a = -0.6 + r() * 1.2 + (r() < 0.5 ? 0 : Math.PI);
+function vein(ctx: Context, W: number, H: number, color: string, r: Random, len: number, width: number, start?: Point) {
+  const pts: Point[] = []; let x = start ? start[0] : r() * W, y = start ? start[1] : r() * H, a = -0.6 + r() * 1.2 + (r() < 0.5 ? 0 : Math.PI);
   for (let i = 0; i < len; i += 6) { pts.push([x, y]); a += (r() - 0.5) * 0.32; x += Math.cos(a) * 6; y += Math.sin(a) * 6 * 0.7; }
-  const stroke = (lw, alpha) => {
+  const stroke = (lw: number, alpha: number) => {
     ctx.strokeStyle = shade(color, 0, alpha); ctx.lineWidth = lw; ctx.lineJoin = ctx.lineCap = 'round';
     ctx.beginPath(); pts.forEach(([px, py], i) => (i ? ctx.lineTo(px, py) : ctx.moveTo(px, py))); ctx.stroke();
   };
@@ -137,9 +149,9 @@ function vein(ctx, W, H, color, r, len, width, start) {
   return pts;
 }
 
-export function marbleTex({ base, vein: vc }, metres = 1.6) {
+export function marbleTex({ base, vein: vc }: { base: string; vein: string }, metres = 1.6) {
   return memo(`marble:${base}:${vc}:${metres}`, () => {
-    const W = 1024, c = canvas(W), ctx = c.getContext('2d'), r = rng(hashSeed(base + vc));
+    const W = 1024, c = canvas(W), ctx = context(c), r = rng(hashSeed(base + vc));
     ctx.fillStyle = base; ctx.fillRect(0, 0, W, W);
     clouds(ctx, W, W, base, r, 18, 0.022);   // honed stone has quiet tonal drift, not blotches
     for (let i = 0; i < 5; i++) {
@@ -153,9 +165,9 @@ export function marbleTex({ base, vein: vc }, metres = 1.6) {
   });
 }
 
-export function speckleTex({ base, flecks }, metres = 0.9) {
+export function speckleTex({ base, flecks }: { base: string; flecks: string[] }, metres = 0.9) {
   return memo(`speckle:${base}:${flecks.join()}:${metres}`, () => {
-    const W = 1024, c = canvas(W), ctx = c.getContext('2d'), r = rng(hashSeed(base + flecks.join()));
+    const W = 1024, c = canvas(W), ctx = context(c), r = rng(hashSeed(base + flecks.join()));
     ctx.fillStyle = base; ctx.fillRect(0, 0, W, W);
     const dark = hexRgb(base).reduce((a, b) => a + b) < 384;
     clouds(ctx, W, W, base, r, dark ? 22 : 10, dark ? 0.05 : 0.008);
@@ -170,20 +182,23 @@ export function speckleTex({ base, flecks }, metres = 0.9) {
 }
 
 // ---------------------------------------------------------------- tiles (colour + a bump map for the grout)
-function tileSet(key, metres, size, draw) {
-  return memo(key, () => {
+function tileSet(key: string, metres: number, size: number, draw: (ctx: Context, bctx: Context, size: number) => void) {
+  let set = tileSets.get(key);
+  if (!set) {
     const c = canvas(size), b = canvas(size);
-    draw(c.getContext('2d'), b.getContext('2d'), size);
-    return { map: toTex(c, metres), bump: toTex(b, metres, false) };
-  });
+    draw(context(c), context(b), size);
+    set = { map: toTex(c, metres), bump: toTex(b, metres, false) };
+    tileSets.set(key, set);
+  }
+  return set;
 }
-function bevelBump(bctx, x, y, w, h, e) {
+function bevelBump(bctx: Context, x: number, y: number, w: number, h: number, e: number) {
   bctx.fillStyle = '#7a7a7a'; bctx.fillRect(x, y, w, h);
   bctx.fillStyle = '#d8d8d8'; bctx.fillRect(x + e, y + e, w - 2 * e, h - 2 * e);
   bctx.fillStyle = '#ffffff'; bctx.fillRect(x + e * 2, y + e * 2, w - 4 * e, h - 4 * e);
 }
 
-export function subwayTiles({ base, grout }) {
+export function subwayTiles({ base, grout }: { base: string; grout: string }) {
   return tileSet(`subway:${base}:${grout}`, 0.6, 1024, (ctx, bctx, S) => {
     const r = rng(11), tw = S / 4, th = S / 8, gw = 5;
     ctx.fillStyle = grout; ctx.fillRect(0, 0, S, S); bctx.fillStyle = '#000'; bctx.fillRect(0, 0, S, S);
@@ -199,7 +214,7 @@ export function subwayTiles({ base, grout }) {
   });
 }
 
-export function zelligeTiles({ base, grout }) {
+export function zelligeTiles({ base, grout }: { base: string; grout: string }) {
   return tileSet(`zellige:${base}:${grout}`, 0.6, 960, (ctx, bctx, S) => {
     const r = rng(23), n = 6, tw = S / n, gw = 4;
     ctx.fillStyle = grout; ctx.fillRect(0, 0, S, S); bctx.fillStyle = '#000'; bctx.fillRect(0, 0, S, S);
@@ -221,7 +236,7 @@ export function zelligeTiles({ base, grout }) {
 }
 
 // 90-degree herringbone of bricks n units long and 1 unit wide; the pattern repeats every 2n units both ways.
-function herringbone(S, n, brick) {
+function herringbone(S: number, n: number, brick: (x: number, y: number, w: number, h: number, along: boolean, seed: number) => void) {
   const P = 2 * n, U = S / P;
   for (let k = -P; k <= P; k++) for (let t = -3 * P; t <= 3 * P; t++) {
     const x = t - n * k, y = t + n * k;
@@ -231,7 +246,7 @@ function herringbone(S, n, brick) {
   }
 }
 
-export function herringboneMarble({ base, vein: vc, grout }) {
+export function herringboneMarble({ base, vein: vc, grout }: { base: string; vein: string; grout: string }) {
   return tileSet(`hbm:${base}:${vc}:${grout}`, 0.3, 960, (ctx, bctx, S) => {
     ctx.fillStyle = grout; ctx.fillRect(0, 0, S, S); bctx.fillStyle = '#000'; bctx.fillRect(0, 0, S, S);
     const gw = 4;
@@ -252,9 +267,9 @@ export function herringboneMarble({ base, vein: vc, grout }) {
   });
 }
 
-export function herringboneWood({ base, grain }) {
+export function herringboneWood({ base, grain }: { base: string; grain: string }) {
   return memo(`hbw:${base}:${grain}`, () => {
-    const S = 1024, c = canvas(S), ctx = c.getContext('2d');
+    const S = 1024, c = canvas(S), ctx = context(c);
     ctx.fillStyle = shade(grain, -0.2); ctx.fillRect(0, 0, S, S);
     herringbone(S, 4, (x, y, w, h, along, seed) => {
       const r = rng(Math.abs(seed) + 3);
@@ -274,12 +289,12 @@ export function herringboneWood({ base, grain }) {
   });
 }
 
-export function plankFloor({ base, grain, plank = 0.19 }) {
+export function plankFloor({ base, grain, plank = 0.19 }: { base: string; grain: string; plank?: number }) {
   return memo(`planks:${base}:${grain}:${plank}`, () => {
-    const S = 1024, rows = 6, rh = S / rows, c = canvas(S), ctx = c.getContext('2d');
+    const S = 1024, rows = 6, rh = S / rows, c = canvas(S), ctx = context(c);
     for (let row = 0; row < rows; row++) {
       const r = rng(row * 131 + 17);
-      const cuts = []; let x = r() * S * 0.5;
+      const cuts: number[] = []; let x = r() * S * 0.5;
       while (cuts.length === 0 || x < cuts[0] + S - 200) { cuts.push(x); x += S * (0.42 + r() * 0.5); }
       for (let i = 0; i < cuts.length; i++) {
         const a = cuts[i], b = i + 1 < cuts.length ? cuts[i + 1] : cuts[0] + S;
@@ -303,18 +318,17 @@ export function plankFloor({ base, grain, plank = 0.19 }) {
       ctx.fillStyle = shade(grain, -0.35, 0.6); ctx.fillRect(0, row * rh, S, 1.6);           // long seam
       ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(0, row * rh + 2, S, 1);
     }
-    const t = toTex(c, rows * plank);
-    return t;
+    return toTex(c, rows * plank);
   });
 }
 
-export function stoneFloor({ base, vein: vc, grout }) {
+export function stoneFloor({ base, vein: vc, grout }: { base: string; vein: string; grout: string }) {
   return memo(`stonefloor:${base}:${vc}:${grout}`, () => {
-    const S = 1024, c = canvas(S), ctx = c.getContext('2d'), half = S / 2, gw = 4;
+    const S = 1024, c = canvas(S), ctx = context(c), half = S / 2, gw = 4;
     ctx.fillStyle = grout; ctx.fillRect(0, 0, S, S);
     for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
       const r = rng(i * 7 + j * 13 + 3);
-      const t = canvas(half), tc = t.getContext('2d');
+      const t = canvas(half), tc = context(t);
       tc.fillStyle = shade(base, (r() - 0.5) * 0.06); tc.fillRect(0, 0, half, half);
       clouds(tc, half, half, base, r, 10, 0.05);
       for (let v = 0; v < 2; v++) vein(tc, half, half, vc, r, 200 + r() * 300, 0.7);
@@ -327,7 +341,7 @@ export function stoneFloor({ base, vein: vc, grout }) {
 // ---------------------------------------------------------------- soft goods
 export function rattanTex() {
   return memo('rattan', () => {
-    const S = 256, c = canvas(S), ctx = c.getContext('2d'), n = 8, u = S / n;
+    const S = 256, c = canvas(S), ctx = context(c), n = 8, u = S / n;
     ctx.fillStyle = '#8D6A3E'; ctx.fillRect(0, 0, S, S);
     for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
       const over = (i + j) % 2 === 0;
@@ -340,7 +354,7 @@ export function rattanTex() {
 }
 export function linenTex() {
   return memo('linen', () => {
-    const S = 256, c = canvas(S), ctx = c.getContext('2d'), r = rng(5);
+    const S = 256, c = canvas(S), ctx = context(c), r = rng(5);
     ctx.fillStyle = '#EEE7DA'; ctx.fillRect(0, 0, S, S);
     for (let i = 0; i < S; i += 2) {
       ctx.fillStyle = `rgba(120,100,70,${0.03 + r() * 0.05})`; ctx.fillRect(0, i, S, 1);
@@ -353,7 +367,7 @@ export function linenTex() {
 // ---------------------------------------------------------------- the soft glow around a lit pendant (not tiled)
 export function glowTex() {
   return memo('glow', () => {
-    const S = 128, c = canvas(S), ctx = c.getContext('2d');
+    const S = 128, c = canvas(S), ctx = context(c);
     const g = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
     g.addColorStop(0, 'rgba(255,255,255,.9)'); g.addColorStop(0.18, 'rgba(255,255,255,.38)'); g.addColorStop(0.5, 'rgba(255,255,255,.1)'); g.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = g; ctx.fillRect(0, 0, S, S);
@@ -366,7 +380,7 @@ export function glowTex() {
 // ---------------------------------------------------------------- the soft contact shadow under the floor slab (not tiled)
 export function contactTex() {
   return memo('contact', () => {
-    const S = 256, c = canvas(S), ctx = c.getContext('2d'), inset = S * 0.2;
+    const S = 256, c = canvas(S), ctx = context(c), inset = S * 0.2;
     // only the blurred shadow of an off-canvas rectangle lands on the canvas
     ctx.shadowColor = '#000'; ctx.shadowBlur = S * 0.11; ctx.shadowOffsetX = S * 2;
     ctx.fillStyle = '#000'; ctx.fillRect(inset - S * 2, inset, S - inset * 2, S - inset * 2);
@@ -375,9 +389,9 @@ export function contactTex() {
 }
 
 // ---------------------------------------------------------------- the view through the window (not tiled)
-export function skyTex(night) {
+export function skyTex(night: boolean) {
   return memo(`sky:${night}`, () => {
-    const W = 512, H = 512, c = canvas(W, H), ctx = c.getContext('2d'), r = rng(night ? 9 : 4);
+    const W = 512, H = 512, c = canvas(W, H), ctx = context(c), r = rng(night ? 9 : 4);
     const g = ctx.createLinearGradient(0, 0, 0, H);
     if (night) { g.addColorStop(0, '#060B18'); g.addColorStop(0.7, '#17223C'); g.addColorStop(1, '#25304A'); }
     else { g.addColorStop(0, '#8DB8DF'); g.addColorStop(0.65, '#CFE2EE'); g.addColorStop(1, '#EAF1F2'); }
@@ -397,7 +411,7 @@ export function skyTex(night) {
         }
       }
     }
-    const hill = (y0, amp, color, ph) => {
+    const hill = (y0: number, amp: number, color: string, ph: number) => {
       ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(0, H);
       for (let x = 0; x <= W; x += 8) ctx.lineTo(x, y0 + Math.sin(x * 0.012 + ph) * amp + Math.sin(x * 0.031 + ph * 2) * amp * 0.35);
       ctx.lineTo(W, H); ctx.fill();
