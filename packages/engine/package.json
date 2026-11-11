@@ -1,0 +1,26 @@
+{
+  "name": "@repo/engine",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./looks": "./src/rooms/kitchen-looks.ts"
+  },
+  "scripts": {
+    "lint": "eslint --max-warnings 0",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "24.19.2",
+    "@types/three": "0.186.0",
+    "eslint": "9.39.5",
+    "typescript": "7.0.2"
+  }
+}

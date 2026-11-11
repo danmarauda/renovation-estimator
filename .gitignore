@@ -1,5 +1,9 @@
 node_modules
 dist
+.next
+.turbo
 .vercel
 ui-check
 .env*
+next-env.d.ts
+*.tsbuildinfo

@@ -1,12 +1,24 @@
-export function createTransitions({ reducedMotion = false, invalidate = () => {} } = {}) {
-  const transitions = new Map();
+interface Transition {
+  duration: number;
+  elapsed: number;
+  step: (progress: number) => void;
+  done?: () => void;
+}
+
+export interface TransitionOptions {
+  reducedMotion?: boolean;
+  invalidate?: () => void;
+}
+
+export function createTransitions({ reducedMotion = false, invalidate = () => {} }: TransitionOptions = {}) {
+  const transitions = new Map<string, Transition>();
 
   return {
     get size() { return transitions.size; },
-    has(key) { return transitions.has(key); },
-    cancel(key) { return transitions.delete(key); },
+    has(key: string) { return transitions.has(key); },
+    cancel(key: string) { return transitions.delete(key); },
     clear() { transitions.clear(); },
-    start(key, duration, step, done) {
+    start(key: string, duration: number, step: (progress: number) => void, done?: () => void) {
       transitions.delete(key);
       if (reducedMotion || duration <= 0) {
         step(1);
@@ -16,7 +28,7 @@ export function createTransitions({ reducedMotion = false, invalidate = () => {}
       }
       invalidate();
     },
-    update(delta) {
+    update(delta: number) {
       const active = transitions.size > 0;
       for (const [key, transition] of transitions) {
         transition.elapsed += Math.max(0, delta) * 1000;

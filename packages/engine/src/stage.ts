@@ -9,18 +9,19 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutlinePass } from 'three/addons/postprocessing/OutlinePass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { setAnisotropy } from './textures.js';
-import { createTransitions } from './transitions.js';
-import { createPartPicker } from './picking.js';
-import { captureLightStudio } from './environment.js';
-import { DissolvePass } from './dissolve.js';
+import { setAnisotropy } from './textures.ts';
+import { createTransitions } from './transitions.ts';
+import { createPartPicker, type PartPicker } from './picking.ts';
+import { captureLightStudio } from './environment.ts';
+import { DissolvePass } from './dissolve.ts';
+import type { CameraView, StageRoom } from './room.ts';
 
-const easeInOut = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
-const easeOut = (k) => 1 - Math.pow(1 - k, 3);
+const easeInOut = (k: number) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+const easeOut = (k: number) => 1 - Math.pow(1 - k, 3);
 // critically damped settle: leaves gently, travels fast, lands soft, never overshoots
-const settle = (k) => 1 - Math.pow(1 - k, 3.2) * (1 + 2.2 * k);
-const lerp = (a, b, t) => a + (b - a) * t;
-const smooth = (a, b, t) => { const k = Math.min(1, Math.max(0, (t - a) / (b - a))); return k * k * (3 - 2 * k); };
+const settle = (k: number) => 1 - Math.pow(1 - k, 3.2) * (1 + 2.2 * k);
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const smooth = (a: number, b: number, t: number) => { const k = Math.min(1, Math.max(0, (t - a) / (b - a))); return k * k * (3 - 2 * k); };
 
 // Light for the two moods (art direction: docs/art-direction.md).
 const DAY = { env: 0.62, key: 2.5, keyColor: new THREE.Color('#FFF0DC'), sky: new THREE.Color('#FFF6EA'), ground: new THREE.Color('#8A6F55'), fill: 0.1, exposure: 0.96 };
@@ -29,11 +30,22 @@ const EDGE = { rest: 1.5, hover: 2.6, pulse: 6 };
 // Quality tiers: 2 = ambient occlusion on, 1 = off, 0 = off and one device pixel per CSS pixel.
 const SLOW_FRAME = 1 / 28, SLOW_SAMPLES = 36;
 
-export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441', coarse, onAvailabilityChange = () => {} }) {
-  let renderer;
+export interface StageOptions {
+  canvas: HTMLCanvasElement;
+  host: HTMLElement;
+  reducedMotion: boolean;
+  coarse: boolean;
+  edgeColor?: string;
+  onAvailabilityChange?: (available: boolean) => void;
+}
+
+export type Stage = NonNullable<ReturnType<typeof createStage>>;
+
+export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441', coarse, onAvailabilityChange = () => {} }: StageOptions) {
+  let renderer: THREE.WebGLRenderer;
   try {
     renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: true, powerPreference: 'high-performance' });
-  } catch (e) {
+  } catch {
     return null;
   }
   renderer.setClearColor(0x000000, 0);
@@ -88,7 +100,7 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
   ao.enabled = tier >= 2;
   // glass, glow and the view outside are not solid: keep them out of the occlusion pass
   const aoRender = ao.render.bind(ao);
-  ao.render = (...args) => {
+  ao.render = (...args: Parameters<GTAOPass['render']>) => {
     const hidden = room ? room.aoHidden.filter((object) => object.visible) : [];
     hidden.forEach((object) => { object.visible = false; });
     try { aoRender(...args); } finally { hidden.forEach((object) => { object.visible = true; }); }
@@ -104,17 +116,19 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
   composer.addPass(outline);
   composer.addPass(new OutputPass());
 
-  let room = null, pickPart = null, needs = true, fit = 1, nightT = 0, selected = null, previewing = null, outlined = null;
-  let raf = 0, disposed = false, contextLost = false, inView = true, lastFrame = null, slowFrames = 0;
+  let room: StageRoom | null = null, pickPart: PartPicker | null = null, needs = true, fit = 1, nightT = 0;
+  let selected: string | null = null, previewing: string | null = null, outlined: string | null = null;
+  let raf = 0, disposed = false, contextLost = false, inView = true, lastFrame: number | null = null, slowFrames = 0;
   function schedule() {
     if (!raf && !disposed && !contextLost && !document.hidden && inView) raf = requestAnimationFrame(loop);
   }
-  function invalidate({ shadows = false } = {}) {
+  function invalidate({ shadows = false }: { shadows?: boolean } = {}) {
     needs = true;
     if (shadows) renderer.shadowMap.needsUpdate = true;
     schedule();
   }
-  controls.addEventListener('change', invalidate);
+  function onControlsChange() { invalidate(); }
+  controls.addEventListener('change', onControlsChange);
 
   // ---------------------------------------------------------------- size
   function resize() {
@@ -153,7 +167,7 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
   intersectionObserver.observe(host);
   document.addEventListener('visibilitychange', updateVisibility);
 
-  function setQuality(next, { lock = false } = {}) {
+  function setQuality(next: number, { lock = false }: { lock?: boolean } = {}) {
     tier = Math.max(0, Math.min(2, next));
     tierLocked = tierLocked || lock;
     ao.enabled = tier >= 2;
@@ -166,13 +180,13 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
   function cancelCameraMove() { transitions.cancel('camera'); }
   controls.addEventListener('start', cancelCameraMove);
 
-  function viewVectors(v) {
+  function viewVectors(v: CameraView) {
     const target = new THREE.Vector3(...v.target);
     const pos = new THREE.Vector3(...v.pos).sub(target).multiplyScalar(fit).add(target);
     return { pos, target };
   }
   // Camera move to a named shot. Any drag, wheel or key press from the user cancels it where it is.
-  function flyTo(v, dur) {
+  function flyTo(v: CameraView, dur?: number) {
     const { pos, target } = viewVectors(v);
     const p0 = camera.position.clone(), t0 = controls.target.clone();
     // travel on a gentle arc: interpolate around the target, not through the room
@@ -191,8 +205,9 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
   }
   function resetView() { if (room) flyTo(room.views.home); }
   // The arrival: start wide and to one side, then settle on the whole kitchen. Reduced motion gets the final frame.
-  // The poster in index.html is this exact pose, so the still picture becomes the live one without a jump.
+  // The poster on the page is this exact pose, so the still picture becomes the live one without a jump.
   function poseArrival() {
+    if (!room) return;
     const { pos, target } = viewVectors(room.views.home);
     const s = new THREE.Spherical().setFromVector3(pos.sub(target));
     s.radius *= 1.22; s.theta = Math.min(controls.maxAzimuthAngle, s.theta + 0.3); s.phi = Math.max(controls.minPolarAngle, s.phi - 0.1);
@@ -209,16 +224,16 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
   // ---------------------------------------------------------------- loop
   let autoRotate = false;
   function renderFrame(delta = 0) { needs = false; composer.render(delta); }
-  function watchFrameRate(delta, animating) {
+  function watchFrameRate(delta: number, animating: boolean) {
     if (tierLocked || tier === 0 || !animating) { slowFrames = 0; return; }
     slowFrames = delta > SLOW_FRAME ? slowFrames + 1 : Math.max(0, slowFrames - 2);
     if (slowFrames >= SLOW_SAMPLES) setQuality(tier - 1);
   }
-  function loop(now) {
+  function loop(now: number) {
     raf = 0;
     if (disposed || contextLost || document.hidden || !inView) { lastFrame = null; return; }
     const animating = lastFrame !== null;
-    const delta = animating ? Math.min((now - lastFrame) / 1000, 0.1) : 1 / 60;
+    const delta = lastFrame !== null ? Math.min((now - lastFrame) / 1000, 0.1) : 1 / 60;
     lastFrame = now;
     watchFrameRate(delta, animating);
     if (transitions.update(delta)) needs = true;
@@ -237,8 +252,8 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
   // ---------------------------------------------------------------- picking
   const ray = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
-  function partAt(clientX, clientY) {
-    if (!room || contextLost || disposed) return null;
+  function partAt(clientX: number, clientY: number) {
+    if (!pickPart || contextLost || disposed) return null;
     const r = canvas.getBoundingClientRect();
     if (!r.width || !r.height) return null;
     ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
@@ -268,8 +283,8 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
     }
     invalidate();
   }
-  function select(id) { if (selected !== id) { selected = id; refreshOutline(); } }
-  function preview(id) { if (previewing !== id) { previewing = id; refreshOutline(); } }
+  function select(id: string | null) { if (selected !== id) { selected = id; refreshOutline(); } }
+  function preview(id: string | null) { if (previewing !== id) { previewing = id; refreshOutline(); } }
   function pulse() {
     if (reducedMotion || !outline.enabled) return;
     transitions.start('outline', 800, (k) => {
@@ -280,7 +295,7 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
   }
 
   // ---------------------------------------------------------------- finish changes cross-fade
-  function crossfade(apply, { shadows = false } = {}) {
+  function crossfade(apply: () => void, { shadows = false }: { shadows?: boolean } = {}) {
     if (reducedMotion || contextLost || disposed || !room) { apply(); invalidate({ shadows }); return; }
     dissolve.enabled = true;
     dissolve.capture = true;
@@ -295,7 +310,7 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
   // The image-based light dips to nothing at the midpoint, where the day capture is swapped for the evening one,
   // while the key and fill lights carry the scene across. Nothing pops.
   const keyColor = new THREE.Color();
-  function applyMood(t) {
+  function applyMood(t: number) {
     nightT = t;
     const evening = t >= 0.5;
     scene.environment = (evening ? studio.evening : studio.day).texture;
@@ -306,16 +321,16 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
     hemi.groundColor.copy(DAY.ground).lerp(EVENING.ground, t);
     hemi.intensity = lerp(DAY.fill, EVENING.fill, t) + 0.5 * Math.sin(Math.PI * t);
     renderer.toneMappingExposure = lerp(DAY.exposure, EVENING.exposure, t);
-    room && room.setNight(t);
+    room?.setNight(t);
   }
-  function setEvening(on) {
+  // The page owns the backdrop behind the canvas and changes it alongside this call.
+  function setEvening(on: boolean) {
     const from = nightT, to = on ? 1 : 0;
-    host.classList.toggle('is-evening', on);
     transitions.start('lighting', 1100, (k) => applyMood(lerp(from, to, easeInOut(k))));
   }
 
   // ---------------------------------------------------------------- keyboard orbit on the canvas
-  function onKeyDown(e) {
+  function onKeyDown(e: KeyboardEvent) {
     if (!controls.enabled) return;
     const step = 0.14;
     let used = true;
@@ -333,7 +348,7 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
   }
   canvas.addEventListener('keydown', onKeyDown);
 
-  function onContextLost(event) {
+  function onContextLost(event: Event) {
     event.preventDefault();
     contextLost = true;
     controls.enabled = false;
@@ -372,7 +387,7 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
     canvas.removeEventListener('webglcontextlost', onContextLost);
     canvas.removeEventListener('webglcontextrestored', onContextRestored);
     controls.removeEventListener('start', cancelCameraMove);
-    controls.removeEventListener('change', invalidate);
+    controls.removeEventListener('change', onControlsChange);
     controls.dispose();
     room?.dispose();
     scene.clear();
@@ -385,7 +400,7 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
 
   return {
     renderer, scene, camera, controls,
-    setRoom(r) {
+    setRoom(r: StageRoom) {
       if (room === r) return;
       if (room) { scene.remove(room.root); room.dispose(); }
       transitions.cancel('camera');
@@ -399,16 +414,16 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
       invalidate({ shadows: true });
     },
     flyTo, resetView, arrive, poseArrival, select, preview, pulse, crossfade, setEvening, partAt, invalidate, dispose, setQuality,
-    setAutoRotate(on) { autoRotate = on; controls.autoRotate = on; invalidate(); },
+    setAutoRotate(on: boolean) { autoRotate = on; controls.autoRotate = on; invalidate(); },
     get autoRotate() { return autoRotate; },
     get quality() { return tier; },
     // Runs the clock forward without waiting for frames, then draws once: for the poster capture and for checks.
-    advance(seconds) {
+    advance(seconds: number) {
       for (let left = seconds; left > 0; left -= 0.05) { transitions.update(0.05); if (!transitions.has('camera')) controls.update(0.05); }
       renderFrame();
     },
     // One full frame, counted: draw calls and triangles from renderer.info, and the time the GPU took.
-    stats({ shadows = true } = {}) {
+    stats({ shadows = true }: { shadows?: boolean } = {}) {
       const info = renderer.info, gl = renderer.getContext();
       info.autoReset = false;
       info.reset();
