@@ -1,0 +1,20 @@
+src/engine/environment.js
+  h_952ed2f92a4b0d 2,47-49,51-52
+src/engine/stage.js
+  h_952ed2f92a4b0d 3-4,16,32-33,42,55-58,116,118,127-202,204,209-211,372,389,401,439-441,457-458,471-472,493,495-496,517-518
+src/main.js
+  h_952ed2f92a4b0d 212-214,218-221
+src/rooms/kitchen.js
+  h_952ed2f92a4b0d 593-595,629
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7d4782e932b67c46b2754cb3e8d7228f66dc7045",
+  "prompts": {},
+  "humans": {
+    "h_952ed2f92a4b0d": {
+      "author": "danmarauda <143896437+danmarauda@users.noreply.github.com>"
+    }
+  }
+}
