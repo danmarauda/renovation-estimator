@@ -1,5 +1,5 @@
 // Image-based light, drawn in code so it matches this room: no HDR download.
-// Two moods are captured once each and prefiltered (PMREM). Sources are brighter than 1 on purpose (HDR).
+// Each mood is captured once and prefiltered (PMREM). Sources are brighter than 1 on purpose (HDR).
 import * as THREE from 'three';
 
 const WARM = '#FFC98A';
@@ -44,17 +44,10 @@ function disposeScene(scene) {
   });
 }
 
-// Returns { day, evening } render targets. The caller owns them and disposes them.
-export function captureLightStudio(renderer, { size = 256 } = {}) {
+// One mood, captured and prefiltered. Returns a render target; the caller owns it and disposes it.
+// Each mood is captured on its own, so the page pays for the evening only when it is about to be needed.
+export function captureMood(renderer, evening, { size = 256 } = {}) {
   const pmrem = new THREE.PMREMGenerator(renderer);
-  const out = {};
-  try {
-    for (const [name, evening] of [['day', false], ['evening', true]]) {
-      const scene = buildMood(evening);
-      try { out[name] = pmrem.fromScene(scene, 0.03, 0.1, 30, { size }); } finally { disposeScene(scene); }
-    }
-  } finally {
-    pmrem.dispose();
-  }
-  return out;
+  const scene = buildMood(evening);
+  try { return pmrem.fromScene(scene, 0.03, 0.1, 30, { size }); } finally { disposeScene(scene); pmrem.dispose(); }
 }

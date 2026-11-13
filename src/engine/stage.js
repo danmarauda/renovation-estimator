@@ -1,6 +1,7 @@
 // The 3D stage: renderer, image-based light and key light for two moods, camera rig with named shots,
 // picking, the hover and selection edge, finish cross-fades and quality tiers.
-// Renders only when something changes (kind to phones and batteries).
+// Renders only when something changes (kind to phones and batteries). Shader programs are built in the background
+// before the first frame, and the evening is prepared while the page is idle, so neither stops the page.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
@@ -12,7 +13,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { setAnisotropy } from './textures.js';
 import { createTransitions } from './transitions.js';
 import { createPartPicker } from './picking.js';
-import { captureLightStudio } from './environment.js';
+import { captureMood } from './environment.js';
 import { DissolvePass } from './dissolve.js';
 
 const easeInOut = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
@@ -28,6 +29,8 @@ const EVENING = { env: 0.5, key: 0.7, keyColor: new THREE.Color('#7F97CC'), sky:
 const EDGE = { rest: 1.5, hover: 2.6, pulse: 6 };
 // Quality tiers: 2 = ambient occlusion on, 1 = off, 0 = off and one device pixel per CSS pixel.
 const SLOW_FRAME = 1 / 28, SLOW_SAMPLES = 36;
+// Longest the first frame waits for its shader programs before drawing anyway, and when the evening is prepared.
+const READY_TIMEOUT = 6000, WARM_EVENING_AFTER = 2800, UPLOAD_SLICE = 6;
 
 export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441', coarse, onAvailabilityChange = () => {} }) {
   let renderer;
@@ -36,6 +39,7 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
   } catch (e) {
     return null;
   }
+  renderer.debug.checkShaderErrors = import.meta.env?.DEV !== false;   // the checks stop the page; keep them for development
   renderer.setClearColor(0x000000, 0);
   renderer.toneMapping = THREE.NeutralToneMapping;   // keeps a chosen finish close to its swatch
   renderer.toneMappingExposure = DAY.exposure;
@@ -48,7 +52,10 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
   RectAreaLightUniformsLib.init();
 
   const scene = new THREE.Scene();
-  let studio = captureLightStudio(renderer, { size: coarse ? 128 : 256 });
+  // the day light is captured now; the evening one when the page is idle, or at the first switch to evening
+  const studioSize = coarse ? 128 : 256;
+  const studio = { day: captureMood(renderer, false, { size: studioSize }), evening: null };
+  const eveningLight = () => studio.evening || (studio.evening = captureMood(renderer, true, { size: studioSize }));
   scene.environment = studio.day.texture;
   scene.environmentIntensity = DAY.env;
 
@@ -106,8 +113,9 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
 
   let room = null, pickPart = null, needs = true, fit = 1, nightT = 0, selected = null, previewing = null, outlined = null;
   let raf = 0, disposed = false, contextLost = false, inView = true, lastFrame = null, slowFrames = 0;
+  let ready = false, readyPromise = Promise.resolve(), warmTimer = 0, warmIdle = 0;
   function schedule() {
-    if (!raf && !disposed && !contextLost && !document.hidden && inView) raf = requestAnimationFrame(loop);
+    if (!raf && ready && !disposed && !contextLost && !document.hidden && inView) raf = requestAnimationFrame(loop);
   }
   function invalidate({ shadows = false } = {}) {
     needs = true;
@@ -116,11 +124,91 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
   }
   controls.addEventListener('change', invalidate);
 
+  // ---------------------------------------------------------------- shader programs, built ahead of the frame that needs them
+  // A program depends on where it draws, so they are built for the composer's target, not for the screen.
+  // Where the browser can compile in parallel the page stays free meanwhile; elsewhere this is the same work, done once.
+  // The effect passes have programs of their own: some redraw the model with one material (normals for the
+  // occlusion, depth and a mask for the selection edge), the rest fill the screen (occlusion, its denoise, the edge).
+  // A program also depends on which vertex data its mesh has: the model has normals, a full-screen pass does not.
+  const passProbe = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1));
+  const passQuad = new THREE.Mesh(new THREE.BufferGeometry()
+    .setAttribute('position', new THREE.Float32BufferAttribute([-1, 3, 0, -1, -1, 0, 3, -1, 0], 3))
+    .setAttribute('uv', new THREE.Float32BufferAttribute([0, 2, 0, 0, 2, 0], 2)));
+  const passCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  const isMaterial = (material) => material?.isMaterial === true;
+  const modelPassMaterials = [ao.normalMaterial, outline.depthMaterial, outline.prepareMaskMaterial].filter(isMaterial);
+  const screenPassMaterials = [ao.gtaoMaterial, ao.pdMaterial, ao.copyMaterial, ao.blendMaterial, outline.edgeDetectionMaterial,
+    outline.separableBlurMaterial1, outline.separableBlurMaterial2, outline.overlayMaterial, outline.materialCopy].filter(isMaterial);
+  function compile() {
+    renderer.setRenderTarget(rt);
+    try {
+      const jobs = [renderer.compileAsync(scene, camera)];
+      // materials the room keeps for options that are not on show yet (another pendant shade, say)
+      const shown = new Set();
+      scene.traverse((object) => { for (const material of [].concat(object.material || [])) shown.add(material); });
+      const waiting = (room?.materials || []).filter((material) => !shown.has(material) && !material.isSpriteMaterial);
+      for (const material of [...waiting, ...modelPassMaterials]) { passProbe.material = material; jobs.push(renderer.compileAsync(passProbe, camera, scene)); }
+      for (const material of screenPassMaterials) { passQuad.material = material; jobs.push(renderer.compileAsync(passQuad, passCamera)); }
+      return Promise.all(jobs);
+    } finally { renderer.setRenderTarget(null); }
+  }
+  // Textures go to the graphics card a few milliseconds at a time, instead of all at once inside the first frame.
+  async function upload() {
+    const textures = new Set();
+    scene.traverse((object) => {
+      for (const material of [].concat(object.material || [])) {
+        for (const value of Object.values(material)) if (value?.isTexture && value.image) textures.add(value);
+      }
+    });
+    let since = performance.now();
+    for (const texture of textures) {
+      if (disposed || contextLost) return;
+      renderer.initTexture(texture);
+      if (performance.now() - since > UPLOAD_SLICE) { await new Promise((resolve) => setTimeout(resolve, 0)); since = performance.now(); }
+    }
+  }
+  // Nothing is drawn until the first frame has what it needs (the poster is on show meanwhile).
+  function prepare() {
+    ready = false;
+    let timer = 0;
+    const done = () => { clearTimeout(timer); if (!disposed) { ready = true; schedule(); } };
+    const timeout = new Promise((resolve) => { timer = setTimeout(resolve, READY_TIMEOUT); });
+    const work = Promise.resolve().then(() => Promise.all([compile(), upload()]));
+    readyPromise = Promise.race([work, timeout]).then(done, done);
+    return readyPromise;
+  }
+  // The other mood uses other programs (the practical lights are in the scene only in the evening) and its own
+  // image-based light. Its programs are built in the background straight after the first frame, and the evening
+  // light is captured once the arrival has settled, so the first change of mood is as smooth as every later one.
+  function warmOtherMood() {
+    const rig = room?.lightRig;
+    if (disposed || contextLost || !rig) return;
+    const was = rig.visible;
+    rig.visible = !was;
+    try { compile().catch(() => {}); } catch (e) { /* the programs are then built at the first change instead */ } finally { rig.visible = was; }
+  }
+  function warmEveningLight() {
+    warmIdle = 0;
+    if (!disposed && !contextLost) eveningLight();
+  }
+  function scheduleWarmEvening() {
+    if (disposed) return;
+    requestAnimationFrame(() => requestAnimationFrame(warmOtherMood));   // after the first frame is on screen
+    clearTimeout(warmTimer);
+    warmTimer = setTimeout(() => {
+      warmIdle = window.requestIdleCallback ? window.requestIdleCallback(warmEveningLight, { timeout: 2000 }) : (warmEveningLight(), 0);
+    }, WARM_EVENING_AFTER);
+  }
+
   // ---------------------------------------------------------------- size
+  let sized = '';
   function resize() {
     const w = Math.max(1, host.clientWidth), h = Math.max(1, host.clientHeight);
     // Bound the whole post-processing pipeline, not just the visible canvas, on large HiDPI screens.
     pr = Math.max(1, Math.min(window.devicePixelRatio || 1, tier === 0 ? 1 : coarse ? 1.5 : 2, Math.sqrt((coarse ? 2_000_000 : 4_000_000) / (w * h))));
+    const next = w + 'x' + h + '@' + pr;
+    if (next === sized) { invalidate(); return; }   // nothing to reallocate
+    sized = next;
     renderer.setPixelRatio(pr);
     renderer.setSize(w, h, false);
     composer.setPixelRatio(pr);
@@ -281,7 +369,7 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
 
   // ---------------------------------------------------------------- finish changes cross-fade
   function crossfade(apply, { shadows = false } = {}) {
-    if (reducedMotion || contextLost || disposed || !room) { apply(); invalidate({ shadows }); return; }
+    if (reducedMotion || contextLost || disposed || !room || !ready) { apply(); invalidate({ shadows }); return; }
     dissolve.enabled = true;
     dissolve.capture = true;
     renderFrame();                 // the frame as it is, kept for the fade
@@ -298,7 +386,7 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
   function applyMood(t) {
     nightT = t;
     const evening = t >= 0.5;
-    scene.environment = (evening ? studio.evening : studio.day).texture;
+    scene.environment = (evening ? eveningLight() : studio.day).texture;
     scene.environmentIntensity = evening ? EVENING.env * smooth(0.5, 1, t) : DAY.env * (1 - smooth(0, 0.5, t));
     key.color.copy(keyColor.copy(DAY.keyColor).lerp(EVENING.keyColor, t));
     key.intensity = lerp(DAY.key, EVENING.key, smooth(0, 0.8, t));
@@ -310,6 +398,7 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
   }
   function setEvening(on) {
     const from = nightT, to = on ? 1 : 0;
+    if (on) eveningLight();   // captured now if it has not been yet, not in the middle of the change
     host.classList.toggle('is-evening', on);
     transitions.start('lighting', 1100, (k) => applyMood(lerp(from, to, easeInOut(k))));
   }
@@ -347,8 +436,9 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
   function onContextRestored() {
     if (disposed) return;
     // Render-target contents are lost with the context; the light studio must be captured again.
-    studio.day.dispose(); studio.evening.dispose();
-    studio = captureLightStudio(renderer, { size: coarse ? 128 : 256 });
+    studio.day.dispose(); studio.evening?.dispose();
+    studio.day = captureMood(renderer, false, { size: studioSize });
+    studio.evening = null;
     contextLost = false;
     controls.enabled = true;
     applyMood(nightT);
@@ -364,6 +454,8 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
     disposed = true;
     cancelAnimationFrame(raf);
     raf = 0;
+    clearTimeout(warmTimer);
+    if (warmIdle) window.cancelIdleCallback?.(warmIdle);
     transitions.clear();
     resizeObserver.disconnect();
     intersectionObserver.disconnect();
@@ -376,7 +468,8 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
     controls.dispose();
     room?.dispose();
     scene.clear();
-    studio.day.dispose(); studio.evening.dispose();
+    studio.day.dispose(); studio.evening?.dispose();
+    passProbe.geometry.dispose(); passQuad.geometry.dispose();
     key.dispose();
     composer.passes.forEach((pass) => pass.dispose());
     composer.dispose();
@@ -397,7 +490,10 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
       camera.position.copy(pos); controls.target.copy(target); controls.update();
       refreshOutline();
       invalidate({ shadows: true });
+      prepare().then(scheduleWarmEvening);
     },
+    // Resolves when the first frame can be drawn without stopping the page to build shader programs.
+    whenReady() { return readyPromise; },
     flyTo, resetView, arrive, poseArrival, select, preview, pulse, crossfade, setEvening, partAt, invalidate, dispose, setQuality,
     setAutoRotate(on) { autoRotate = on; controls.autoRotate = on; invalidate(); },
     get autoRotate() { return autoRotate; },
@@ -418,7 +514,8 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
       gl.finish();
       const out = {
         drawCalls: info.render.calls, triangles: info.render.triangles, frameMs: Math.round((performance.now() - t0) * 10) / 10,
-        geometries: info.memory.geometries, textures: info.memory.textures, quality: tier, pixelRatio: Math.round(pr * 100) / 100,
+        geometries: info.memory.geometries, textures: info.memory.textures, programs: info.programs.length,
+        quality: tier, pixelRatio: Math.round(pr * 100) / 100,
       };
       info.autoReset = true;
       return out;

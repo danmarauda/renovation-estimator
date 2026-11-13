@@ -590,6 +590,9 @@ export function buildKitchen() {
     pendantLights.forEach((l) => { l.intensity = t * 3.4; });
     rectLights.forEach((l) => { l.intensity = state.led ? t * 8 : 0; });
     M.skyNight.opacity = t; nightSky.visible = t > 0.001;
+    // By day the pendants, strips and halos give no light. Hidden, they also cost nothing: a light that is in the
+    // scene is worked out for every pixel of every surface, even at zero strength.
+    lights.visible = t > 0.001;
     skyColours.forEach(([material, day, night]) => material.color.copy(day).lerp(night, t));
   }
   function setNight(t) { state.night = t; applyNight(); }
@@ -623,5 +626,5 @@ export function buildKitchen() {
     root.clear();
   }
 
-  return { root, partObjects, aoHidden, applyLooks, setNight, views, dispose };
+  return { root, partObjects, aoHidden, lightRig: lights, materials: Object.values(M), applyLooks, setNight, views, dispose };
 }

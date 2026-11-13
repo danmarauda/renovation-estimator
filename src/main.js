@@ -209,11 +209,16 @@ async function initializeScene() {
     kitchen = builders[roomId]();
     kitchen.applyLooks(looks());
     stage.setRoom(kitchen);
+    // shader programs are built in the background; the poster stays up and the panel stays usable meanwhile
+    await stage.whenReady();
+    if (disposed) return;
     stage.select(activePart());
     setupPicking();
     setSceneAvailability(true);
-    // the arrival: the live kitchen fades in over its poster while the camera settles (a cut with reduced motion)
-    stage.arrive();
+    // the arrival: the live kitchen fades in over its poster while the camera settles (a cut with reduced motion).
+    // If a step was chosen while the scene was loading, go straight to its shot instead.
+    const chosen = kitchen.views[state.active];
+    if (chosen) stage.flyTo(chosen, 0); else stage.arrive();
     stageEl.classList.add('is-live');
     // development only: lets the renderer be measured (renderer.info) from the console; stripped from the build
     if (import.meta.env.DEV) window.__studio = { stage, kitchen };
