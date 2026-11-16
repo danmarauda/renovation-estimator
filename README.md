@@ -10,17 +10,32 @@ a website feature for renovation companies: visitors see a realistic range befor
 
 ## How it's built
 
-- **three.js**, with the whole kitchen built in code, no model files (`src/rooms/kitchen.js`, `src/engine/`).
-  Procedural textures, day and evening lighting, click-to-select on any part.
-- **One config file per business** (`src/business.config.js`): name, contact, parts, options and price ranges.
-  Re-skinning it for a new company means editing that one file.
-- Plain JavaScript and CSS, built with Vite.
+- **Next.js App Router** in `apps/web`, with server-rendered studio markup and a client lifecycle boundary for the existing controls.
+- **Plain three.js** in `packages/engine`, with the kitchen built in code, procedural textures, day and evening lighting, named camera shots and click-to-select. The engine loads separately after the page renders.
+- **Strict TypeScript** throughout, with shared TypeScript and ESLint configuration in `packages/`.
+- **One business configuration** in `apps/web/lib/business.config.ts`: branding, metric dimensions, parts, options and provisional AUD allowances. Look shapes are checked against the engine's contracts.
+- **pnpm workspaces and Turborepo** orchestrate development, linting, type-checking, tests and production builds.
 
-The prices are placeholder mid-range US numbers, and only the kitchen exists so far.
+Prices are indicative planning allowances, not a quote. Incredible Kitchens must confirm final scope, GST treatment and pricing. Kitchen size scales allowances, not the illustrative 3D layout. Online consultation bookings remain unavailable and no request is sent.
 
-## Running it
+## Development
+
+Requires Node.js 22.18 or later and the pnpm version pinned in `package.json`.
 
 ```bash
-npm install
-npm run dev
+pnpm install --frozen-lockfile
+pnpm dev
 ```
+
+## Verification
+
+```bash
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm build
+```
+
+## Vercel
+
+The deployable application is `apps/web`. Set the Vercel project's Root Directory to `apps/web`, use the Next.js framework preset, and enable access to workspace files outside the Root Directory. Keep the repository root as the pnpm workspace root. These settings do not deploy the app by themselves; production deployment requires approval.

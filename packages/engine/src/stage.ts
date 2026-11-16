@@ -93,9 +93,9 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
   });
   const composer = new EffectComposer(renderer, rt);
   composer.addPass(new RenderPass(scene, camera));
-  const ao = new GTAOPass(scene, camera, 1, 1, undefined,
-    { radius: 0.32, distanceExponent: 1.5, thickness: 1.2, scale: 1.15, samples: 12, distanceFallOff: 1, screenSpaceRadius: false },
-    { lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 5, radiusExponent: 1.3, rings: 2, samples: 12 });
+  const ao = new GTAOPass(scene, camera, 1, 1);
+  ao.updateGtaoMaterial({ radius: 0.32, distanceExponent: 1.5, thickness: 1.2, scale: 1.15, samples: 12, distanceFallOff: 1, screenSpaceRadius: false });
+  ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 5, radiusExponent: 1.3, rings: 2, samples: 12 });
   ao.blendIntensity = 0.9;
   ao.enabled = tier >= 2;
   // glass, glow and the view outside are not solid: keep them out of the occlusion pass

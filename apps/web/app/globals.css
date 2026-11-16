@@ -1,0 +1,5 @@
+:root { --font: var(--font-studio-sans), sans-serif; --loud: var(--font-studio-serif), serif; }
+.bg-background { background: var(--st-1); }
+.font-sans { font-family: var(--font); }
+.font-serif, .ws-loud { font-family: var(--loud); }
+.measurements dl > div { display: contents; }
