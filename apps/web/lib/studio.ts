@@ -4,12 +4,15 @@ import { injectSprite } from './icons.ts';
 import { defaultChoices, moneyRange, optionOf, setFormat, setRounding } from './estimate.ts';
 import { createPanel } from './panel.ts';
 import { createConsult } from './consult.ts';
+import { createModelInspector } from './model-inspector.ts';
 import { required } from './dom.ts';
 import type { StudioState, VoiceDesign } from './types.ts';
 import type { Stage, RoomModel } from '@repo/engine';
 import type { KitchenLooks } from '@repo/engine/looks';
 
-export function mountStudio(openVoice: (design: VoiceDesign) => void) {
+import { createStudioTools, type CameraCommand, type StudioExecute } from './studio-tools.ts';
+
+export function mountStudio(openVoice: (design: VoiceDesign, execute: StudioExecute) => void, updateVoice: (design: VoiceDesign) => void) {
   injectSprite();
   const events = new AbortController();
   const listen = <K extends keyof HTMLElementEventMap>(el: HTMLElement, type: K, fn: (event: HTMLElementEventMap[K]) => void) => el.addEventListener(type, fn, { signal: events.signal });
@@ -43,14 +46,17 @@ export function mountStudio(openVoice: (design: VoiceDesign) => void) {
   }
   availability(false, 'Loading your 3D kitchen. You can already choose finishes and check your estimate.');
   const sideways = CSS.supports('grid-template-columns', 'subgrid') ? '(orientation: landscape) and (max-height: 540px) and (min-width: 540px)' : 'not all';
+  const measure = createModelInspector(required('#measurements'));
+  const apply = (model: RoomModel<KitchenLooks>) => { model.applyLooks(looks()); measure(model.measurements); };
   const panel = createPanel({ room, state, reducedMotion, signal: events.signal, on: {
     change(partId) {
       panel.update(partId);
+      refreshDock();
       if (stage && kitchen && partId) {
         const model = kitchen;
-        stage.crossfade(() => model.applyLooks(looks()), { shadows: ['cabinets', 'countertops', 'island', 'lighting', 'appliances'].includes(partId) });
+        stage.crossfade(() => apply(model), { shadows: ['cabinets', 'countertops', 'island', 'lighting', 'appliances'].includes(partId) });
         stage.select(partId); stage.pulse();
-      }
+      } else if (kitchen && partId) apply(kitchen);
     },
     selectStep,
     previewPart(id) { stage?.preview(id); },
@@ -58,6 +64,7 @@ export function mountStudio(openVoice: (design: VoiceDesign) => void) {
   function selectStep(id: string, from: string) {
     state.active = id;
     panel.update(null);
+    refreshDock();
     if (stage && kitchen) {
       const view = kitchen.views[id] || kitchen.views.home;
       stage.select(panel.isPart(id) ? id : null); stage.flyTo(view);
@@ -70,31 +77,50 @@ export function mountStudio(openVoice: (design: VoiceDesign) => void) {
   }
   panel.update(null);
   required('#panel').setAttribute('aria-busy', 'false');
-  document.querySelectorAll<HTMLButtonElement>('.time-seg [data-time]').forEach((button) => listen(button, 'click', () => {
-    const evening = button.dataset.time === 'evening';
-    stageEl.classList.toggle('is-evening', evening);
-    document.querySelectorAll<HTMLElement>('.time-seg [data-time]').forEach((other) => { other.classList.toggle('on', other === button); other.setAttribute('aria-pressed', String(other === button)); });
-    stage?.setEvening(evening);
-    announce(evening ? 'Evening lighting: pendants and under-cabinet lights on.' : 'Day lighting.');
-  }));
-  const rotate = required('#autoRotate');
-  listen(rotate, 'click', () => {
-    const on = rotate.getAttribute('aria-pressed') !== 'true';
-    rotate.setAttribute('aria-pressed', String(on)); stage?.setAutoRotate(on);
-    announce(on ? 'Auto-rotate on.' : 'Auto-rotate off.');
-  });
-  listen(required('#wholeView'), 'click', () => { stage?.resetView(); announce('3D view: Whole kitchen.'); });
+  const rotate = required<HTMLButtonElement>('#autoRotate');
+  function setView(value: CameraCommand) {
+    if (!stage || rotate.disabled) return false;
+    if (value === 'day' || value === 'evening') {
+      const evening = value === 'evening';
+      stageEl.classList.toggle('is-evening', evening);
+      document.querySelectorAll<HTMLElement>('.time-seg [data-time]').forEach(other => {
+        const active = other.dataset.time === value;
+        other.classList.toggle('on', active); other.setAttribute('aria-pressed', String(active));
+      });
+      stage.setEvening(evening);
+      announce(evening ? 'Evening lighting: pendants and under-cabinet lights on.' : 'Day lighting.');
+    } else if (value === 'rotate_on' || value === 'rotate_off') {
+      const on = value === 'rotate_on';
+      rotate.setAttribute('aria-pressed', String(on)); stage.setAutoRotate(on);
+      announce(on ? 'Auto-rotate on.' : 'Auto-rotate off.');
+    } else {
+      if (!stage.moveCamera(value)) return false;
+      announce(value === 'whole' ? '3D view: Whole kitchen.' : `3D view: ${value.replace('_', ' ')}.`);
+    }
+    return true;
+  }
+  document.querySelectorAll<HTMLButtonElement>('.time-seg [data-time]').forEach(button => listen(button, 'click', () => setView(button.dataset.time === 'evening' ? 'evening' : 'day')));
+  listen(rotate, 'click', () => setView(stage?.autoRotate ? 'rotate_off' : 'rotate_on'));
+  listen(required('#wholeView'), 'click', () => setView('whole'));
   const consult = createConsult({ getTotals: () => panel.totals });
   document.querySelectorAll<HTMLElement>('[data-open-consult]').forEach((button) => listen(button, 'click', () => consult.open(button)));
 
-  for (const button of document.querySelectorAll<HTMLButtonElement>('[data-open-voice]')) {
-    button.disabled = false;
-    listen(button, 'click', () => {
-      const size = room.sizes.find((entry) => entry.id === state.size)!;
-      const { range, lines } = panel.totals;
-      openVoice({ size: `${size.name}, ${size.note}`, step: state.active === 'size' ? 'Kitchen size' : room.parts.find((p) => p.id === state.active)?.name ?? 'Estimate', estimate: moneyRange(range), finishes: lines.filter((line) => line.id !== 'base') });
-    });
+  const launcher = required<HTMLButtonElement>('[data-open-voice]');
+  function design(): VoiceDesign {
+    const size = room.sizes.find(entry => entry.id === state.size)!;
+    const { range, lines } = panel.totals;
+    return { choices: structuredClone(state.choices), stepId: state.active, size: `${size.name}, ${size.note}`, step: state.active === 'size' ? 'Model measurements' : room.parts.find(p => p.id === state.active)?.name ?? 'Estimate', estimate: moneyRange(range), finishes: lines.filter(line => line.id !== 'base') };
   }
+  function refreshDock() { if (launcher.getAttribute('aria-expanded') === 'true') updateVoice(design()); }
+  const execute = createStudioTools(room, {
+    snapshot: () => ({ ...design(), range:panel.totals.range, currency:cfg.estimate.currency, disclaimer:cfg.estimate.disclaimer, lighting:stageEl.classList.contains('is-evening') ? 'evening' : 'day', rotating:stage?.autoRotate ?? false, sceneAvailable:!!stage && !rotate.disabled, consultationOpen:required<HTMLDialogElement>('#consult').open }),
+    measurements: () => kitchen ? Object.fromEntries(kitchen.measurements) : null,
+    select: id => selectStep(id, 'assistant'), pick:(p,g,o) => panel.pick(p,g,o,false),
+    view: value => !(value === 'rotate_on' && matchMedia('(prefers-reduced-motion: reduce)').matches) && setView(value),
+    consult: open => { if (open) consult.open(launcher); else consult.close(); },
+  });
+  launcher.disabled = false;
+  listen(launcher, 'click', () => openVoice(design(), execute));
 
   function setupPicking() {
     let down: { id: number; x: number; y: number; time: number } | null = null;
@@ -140,8 +166,14 @@ export function mountStudio(openVoice: (design: VoiceDesign) => void) {
       releaseTextures = disposeTextures;
       const edgeColor = getComputedStyle(document.documentElement).getPropertyValue('--brass').trim() || undefined;
       stage = createStage({ canvas, host: stageEl, reducedMotion, edgeColor, coarse, onAvailabilityChange: availability });
-      if (!stage) throw new Error('WebGL is unavailable');
-      kitchen = builders.kitchen(); kitchen.applyLooks(looks()); stage.setRoom(kitchen);
+      kitchen = builders.kitchen(); apply(kitchen);
+      if (!stage) {
+        canvas.hidden = true; stageEl.classList.add('is-failed');
+        availability(false, 'Static preview · 3D unavailable. Measurements and the estimate still update.');
+        canvas.setAttribute('aria-busy', 'false');
+        return;
+      }
+      stage.setRoom(kitchen);
       stage.select(panel.isPart(state.active) ? state.active : null);
       setupPicking(); availability(true); stage.arrive(); stageEl.classList.add('is-live');
     } catch (error) {
@@ -150,6 +182,7 @@ export function mountStudio(openVoice: (design: VoiceDesign) => void) {
       canvas.hidden = true; stageEl.classList.add('is-failed');
       availability(false, 'Static preview · 3D unavailable. Your selections still update the estimate.');
       canvas.setAttribute('aria-busy', 'false');
+      required('#measurements').textContent = 'Model dimensions are unavailable. You can still explore finishes and the estimate.';
       console.error('The 3D kitchen could not be initialised.', error);
     }
   }
@@ -158,7 +191,7 @@ export function mountStudio(openVoice: (design: VoiceDesign) => void) {
   return () => {
     if (disposed) return;
     disposed = true; events.abort(); cancelAnimationFrame(startupFrame); clearTimeout(startupTimer); cancelAnimationFrame(pendingPick);
-    stage?.dispose(); panel.dispose(); consult.dispose(); releaseTextures?.();
+    stage?.dispose(); if (!stage) kitchen?.dispose(); panel.dispose(); consult.dispose(); releaseTextures?.();
     stageEl.classList.remove('is-live', 'is-failed', 'is-evening'); canvas.hidden = false;
   };
 }

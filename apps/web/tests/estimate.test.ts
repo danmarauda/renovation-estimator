@@ -16,7 +16,8 @@ test('Australian branding, currency and metric areas are configured', () => {
   assert.equal(money(12345), new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD', maximumFractionDigits: 0 }).format(12345));
   assert.deepEqual(room.sizes.map(size => size.areaM2), [10, 14, 21]);
   assert.ok(room.sizes.every(size => size.note.includes('m²') && !size.note.includes('sq ft')));
-  assert.ok(room.measurements.every(measurement => Number.isInteger(measurement.value) && measurement.value > 0));
+  assert.equal(room.defaultSize, 'medium');
+  assert.deepEqual(totals(room, defaultChoices(room), room.defaultSize).range, [39600, 64800]);
 });
 
 test('every default choice exists and every option has an ordered, non-negative price range', () => {

@@ -8,7 +8,6 @@ export interface RoomConfig {
   name: string; title: string; titleEm: string; intro: string;
   sizes: { id: string; name: string; note: string; areaM2: number; factor: number }[];
   defaultSize: string; sizeNote: string; measurementNote: string;
-  measurements: { name: string; value: number }[];
   base: { name: string; price: PriceRange; scales: boolean };
   parts: Part[];
 }
@@ -21,7 +20,7 @@ export interface BusinessConfig {
   defaultRoom: 'kitchen';
   rooms: { kitchen: Omit<RoomConfig, 'parts'> & { parts: TypedPart[] } };
 }
-export interface VoiceDesign { size: string; step: string; estimate: string; finishes: { id: string; name: string; summary: string }[] }
+export interface VoiceDesign { choices: Choices; stepId: string; size: string; step: string; estimate: string; finishes: { id: string; name: string; summary: string }[] }
 export type Choices = Record<string, Record<string, string>>;
 export interface StudioState { size: string; choices: Choices; active: string }
 export interface EstimateTotals { lines: { id: string; name: string; summary: string; range: PriceRange }[]; range: PriceRange }

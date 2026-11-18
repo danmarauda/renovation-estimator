@@ -91,6 +91,7 @@ function AgentChatInput({ chatOpen, onSend = async () => {}, className }: AgentC
   };
 
   const handleKeyDown = async (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -115,7 +116,8 @@ function AgentChatInput({ chatOpen, onSend = async () => {}, className }: AgentC
         ref={inputRef}
         value={message}
         disabled={!chatOpen || isSending}
-        placeholder="Type something..."
+        aria-label="Message the kitchen assistant"
+        placeholder="Message the kitchen assistant"
         onKeyDown={handleKeyDown}
         onChange={(e) => setMessage(e.target.value)}
         className="field-sizing-content max-h-16 min-h-8 flex-1 resize-none py-2 [scrollbar-width:thin] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"

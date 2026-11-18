@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { isMesh, planeGeo, mesh, boxFT, boxC, cyl, clear } from '../geo.ts';
 import * as TX from '../textures.ts';
+import { bounds, envelope, footprint, lengths, type Dimension } from '../measurements.ts';
 import type { KitchenLooks, DoorStyle, Finish, WoodTone, AppliancePackage, PendantLook, StoolKind } from './kitchen-looks.ts';
 import type { RoomModel, RoomViews } from '../room.ts';
 
@@ -189,6 +190,7 @@ function unit(f: THREE.Group, h: THREE.Group, style: DoorStyle, mat: THREE.Mater
 
 // ------------------------------------------------------------------ the kitchen
 export function buildKitchen(): RoomModel<KitchenLooks> {
+  const measurements = new Map<string, Dimension[]>();
   const M = makeMaterials();
   const root = new THREE.Group();
   const G = {} as Record<KitchenGroup, THREE.Group>;
@@ -235,6 +237,8 @@ export function buildKitchen(): RoomModel<KitchenLooks> {
   const glazing = mesh(planeGeo(1.36, 1.04), M.pane, { cast: false, receive: false });
   glazing.position.set(0, 1.67, -2.262);
   W.add(glazing);
+  const slab = bounds(floor);
+  measurements.set('Room footprint', [...footprint(slab), lengths('Floor to wall top', bounds(W).max.y - slab.max.y)]);
   bakeInto(G.walls, W);
   const paneObject = G.walls.children.find((child) => isMesh(child) && child.material === M.pane);
   if (!paneObject) throw new Error('Kitchen window pane is missing');
@@ -256,21 +260,22 @@ export function buildKitchen(): RoomModel<KitchenLooks> {
 
   // ---------------------------------------------------------------- cabinet boxes (carcass)
   const C = new THREE.Group();
-  const carc = (...a: BoxCorners) => C.add(boxFT(...a, M.cab));
-  carc(-2.6, 0.1, -2.2, 1.6, 0.88, -1.6);       // back run
+  const carc = (...a: BoxCorners) => { const body = boxFT(...a, M.cab); C.add(body); return body; };
+  const backBase = carc(-2.6, 0.1, -2.2, 1.6, 0.88, -1.6);       // back run
   carc(-2.6, 0, -2.2, 1.6, 0.1, -1.66);         // toe kick
   carc(-2.6, 0.1, -1.6, -2.0, 0.88, -1.0);      // left run, before the range
   carc(-2.6, 0.1, -0.24, -2.0, 0.88, 0.36);     // left run, after the range
   carc(-2.6, 0, -1.6, -2.06, 0.1, -1.0);
   carc(-2.6, 0, -0.24, -2.06, 0.1, 0.3);
-  carc(-2.6, 1.42, -2.2, -0.85, 2.22, -1.85);   // back uppers
+  const upper = carc(-2.6, 1.42, -2.2, -0.85, 2.22, -1.85);   // back uppers
   carc(0.85, 1.42, -2.2, 1.6, 2.22, -1.85);
   carc(-2.6, 1.42, -1.85, -2.27, 2.22, -1.0);   // left uppers
   carc(-2.6, 1.42, -0.24, -2.27, 2.22, 0.36);
-  carc(1.6, 0.1, -2.2, 2.4, 2.22, -1.6);        // pantry
+  const pantry = carc(1.6, 0.1, -2.2, 2.4, 2.22, -1.6);        // pantry
   carc(1.6, 0, -2.2, 2.4, 0.1, -1.66);
   carc(-2.6, 1.86, 0.5, -2.0, 2.22, 1.42);      // over the fridge
   carc(-2.6, 0, 1.42, -1.83, 2.22, 1.46);       // fridge end panel
+  measurements.set('Cabinet bodies', [envelope('Rear base run', bounds(backBase)), envelope('Rear left overhead', bounds(upper)), envelope('Pantry', bounds(pantry))]);
   bakeInto(G.carcass, C);
 
   // ---------------------------------------------------------------- backsplash (geometry fixed; the material changes)
@@ -291,6 +296,7 @@ export function buildKitchen(): RoomModel<KitchenLooks> {
   const fb = cyl(0.026, 0.03, 0.035, M.metal, 24); fb.position.set(0, 0.937, -2.14); faucetMeshes.add(fb);
   const lever = rodBetween(V(0.07, 0.95, -2.12), V(0.07, 1.04, -2.07), 0.006, M.metal); faucetMeshes.add(lever);
   const lb = cyl(0.018, 0.02, 0.03, M.metal, 16); lb.position.set(0.07, 0.935, -2.12); faucetMeshes.add(lb);
+  measurements.set('Sink and tap', [envelope('Bowl exterior', bounds(sinkMesh)), lengths('Tap top above floor', bounds(faucetMeshes).max.y - slab.max.y)]);
   const faucet = new THREE.Group(); G.sink.add(faucet); bakeInto(faucet, faucetMeshes);
 
   // ---------------------------------------------------------------- decor (not clickable)
@@ -314,7 +320,11 @@ export function buildKitchen(): RoomModel<KitchenLooks> {
 
   // ---------------------------------------------------------------- casework: fronts, island, appliances, pulls
   function rebuildCasework(style: DoorStyle, app: AppliancePackage) {
-    const F = new THREE.Group(), H = new THREE.Group(), I = new THREE.Group(), A = new THREE.Group();
+    const F = new THREE.Group(), H = new THREE.Group(), I = new THREE.Group();
+    const appliances = new THREE.Group();
+    function appliance() { const g = new THREE.Group(); appliances.add(g); return g; }
+    const fridge = appliance(), cooker = appliance(), hood = appliance(), dishwasher = appliance();
+    let A = fridge;
     const pair = (x: number, z: number, r: number): [THREE.Group, THREE.Group] => [frame(F, x, z, r), frame(H, x, z, r)];
     const hw = M.metal;
     // back run, base (front plane z = -1.6)
@@ -371,6 +381,7 @@ export function buildKitchen(): RoomModel<KitchenLooks> {
       A.add(rodBetween(V(-1.79, 0.69, 0.66), V(-1.79, 0.69, 1.26), hr, M.steel, 12));
       A.add(rodBetween(V(-1.83, 0.69, 0.69), V(-1.79, 0.69, 0.69), 0.006, M.steel)); A.add(rodBetween(V(-1.83, 0.69, 1.23), V(-1.79, 0.69, 1.23), 0.006, M.steel));
     }
+    A = cooker;
     // range (left wall, z -1.0 .. -0.24)
     A.add(boxFT(-2.6, 0, -0.995, -1.99, 0.9, -0.245, M.steel));
     A.add(boxFT(-1.99, 0.12, -0.96, -1.965, 0.7, -0.28, M.steel));
@@ -390,6 +401,7 @@ export function buildKitchen(): RoomModel<KitchenLooks> {
       if (app.pro) { A.add(boxFT(x - 0.11, 0.928, z - 0.005, x + 0.11, 0.94, z + 0.005, M.iron)); A.add(boxFT(x - 0.005, 0.928, z - 0.1, x + 0.005, 0.94, z + 0.1, M.iron)); }
     }
     A.add(boxFT(-2.6, 0.915, -0.995, -2.52, app.pro ? 1.06 : 0.99, -0.245, M.steel));
+    A = hood;
     // hood
     if (app.panel) {
       A.add(boxFT(-2.6, 1.48, -1.02, -2.05, 2.22, -0.22, M.cab));
@@ -402,6 +414,7 @@ export function buildKitchen(): RoomModel<KitchenLooks> {
       const can = cyl(0.17, 0.32, 0.12, M.steel, 4); can.rotation.y = Math.PI / 4; can.scale.set(0.65, 1, 1.15); can.position.set(-2.4, 1.72, -0.62); A.add(can);
       A.add(boxFT(-2.6, 1.78, -0.76, -2.33, 2.6, -0.48, M.steel));
     }
+    A = dishwasher;
     // dishwasher (back run u -1.05 .. -0.45)
     if (app.panel) {
       const df = frame(A, 0, -1.6, 0), dh = frame(H, 0, -1.6, 0);
@@ -413,20 +426,30 @@ export function buildKitchen(): RoomModel<KitchenLooks> {
       A.add(rodBetween(V(-0.95, 0.79, -1.54), V(-0.55, 0.79, -1.54), 0.008, M.steel, 12));
       A.add(rodBetween(V(-0.93, 0.79, -1.575), V(-0.93, 0.79, -1.54), 0.005, M.steel)); A.add(rodBetween(V(-0.57, 0.79, -1.575), V(-0.57, 0.79, -1.54), 0.005, M.steel));
     }
-    bakeInto(G.fronts, F); bakeInto(G.handles, H); bakeInto(G.island, I); bakeInto(G.appliances, A);
+    measurements.set('Appliances', [envelope('Fridge assembly', bounds(fridge), true), envelope('Cooker', bounds(cooker), true), envelope('Rangehood', bounds(hood), true), envelope('Dishwasher front', bounds(dishwasher))]);
+    bakeInto(G.fronts, F); bakeInto(G.handles, H); bakeInto(G.island, I); bakeInto(G.appliances, appliances);
   }
 
   // ---------------------------------------------------------------- countertops
   function rebuildCounters(waterfall: boolean) {
-    const K = new THREE.Group(), c = (...a: BoxCorners) => K.add(boxFT(...a, M.counter));
+    const K = new THREE.Group(), back = new THREE.Group(), left = new THREE.Group(), island = new THREE.Group();
+    K.add(back, left, island);
+    let run = back;
+    const c = (...a: BoxCorners) => run.add(boxFT(...a, M.counter));
     const y0 = 0.88, y1 = 0.92;
     c(-2.6, y0, -2.2, -0.38, y1, -1.575); c(0.38, y0, -2.2, 1.6, y1, -1.575);
     c(-0.38, y0, -2.2, 0.38, y1, -2.1); c(-0.38, y0, -1.72, 0.38, y1, -1.575);
+    run = left;
     c(-2.6, y0, -1.575, -1.975, y1, -1.0); c(-2.6, y0, -0.24, -1.975, y1, 0.385);
+    run = island;
     if (waterfall) {
       c(-0.86, y0, -0.58, 1.26, y1, 0.35);
       c(-0.86, 0, -0.58, -0.82, y0, 0.35); c(1.22, 0, -0.58, 1.26, y0, 0.35);
     } else c(-0.83, y0, -0.58, 1.23, y1, 0.35);
+    const rear = bounds(back), side = bounds(left), top = bounds(island.children[0]);
+    measurements.set('Bench runs', [envelope('Rear benchtop', rear), ...left.children.map((piece, i) => envelope(`Left segment ${i + 1}`, bounds(piece), true)), lengths('Finished height', rear.max.y - slab.max.y)]);
+    measurements.set('Island', [envelope('Benchtop', top), lengths('Finished height', top.max.y - slab.max.y), ...(waterfall ? [envelope('Waterfall end', bounds(island.children[1]))] : [])]);
+    measurements.set('Aisles', [lengths('Rear bench to island', top.min.z - rear.max.z), lengths('Left bench to island', top.min.x - side.max.x)]);
     bakeInto(G.counters, K);
   }
 
@@ -450,6 +473,8 @@ export function buildKitchen(): RoomModel<KitchenLooks> {
         for (const a of [-0.9, 0.9]) s.add(rodBetween(V(Math.sin(a) * 0.185, 0.67, Math.cos(a) * 0.185), V(Math.sin(a) * 0.185, 0.73, Math.cos(a) * 0.185), 0.008, M.frame));
       }
     }
+    if (St.children.length) measurements.set('Stools', St.children.map((stool, i) => envelope(`Stool ${i + 1}`, bounds(stool))));
+    else measurements.delete('Stools');
     bakeInto(G.stools, St);
   }
 
@@ -499,6 +524,7 @@ export function buildKitchen(): RoomModel<KitchenLooks> {
       const halo = new THREE.Sprite(M.halo); halo.position.set(x, bulbY, z); halo.scale.setScalar(0.7);
       lights.add(halo); halos.push(halo);
     }
+    measurements.set('Pendants', pendantLights.slice(1).map((light, i) => lengths(`Centres ${i + 1} to ${i + 2}`, light.position.distanceTo(pendantLights[i].position))));
     bakeInto(G.pendants, P);
     refreshAoHidden();
     applyNight();
@@ -632,5 +658,5 @@ export function buildKitchen(): RoomModel<KitchenLooks> {
     root.clear();
   }
 
-  return { root, partObjects, aoHidden, applyLooks, setNight, views, dispose };
+  return { root, partObjects, aoHidden, measurements, applyLooks, setNight, views, dispose };
 }

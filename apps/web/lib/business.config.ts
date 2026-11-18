@@ -61,11 +61,6 @@ const config: BusinessConfig = {
       defaultSize: 'medium',
       sizeNote: 'Size adjusts the allowance only, not the illustrative 3D layout.',
       measurementNote: 'Illustrative dimensions only. Confirm measurements and appliance clearances on site.',
-      measurements: [
-        { name: 'Benchtop height', value: 920 },
-        { name: 'Benchtop depth', value: 625 },
-        { name: 'Ceiling height', value: 2600 },
-      ],
       base: { name: 'Demolition, plumbing, electrical and approvals', price: [9500, 15500], scales: true },
 
       parts: [

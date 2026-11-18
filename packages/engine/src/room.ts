@@ -25,5 +25,6 @@ export interface StageRoom {
 }
 
 export interface RoomModel<Looks> extends StageRoom {
+  readonly measurements: import('./measurements.ts').ModelMeasurements;
   applyLooks(looks: Looks): void;
 }

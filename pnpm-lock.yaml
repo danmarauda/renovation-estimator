@@ -17,12 +17,18 @@ importers:
       '@livekit/components-react':
         specifier: ^2.9.25
         version: 2.9.25(livekit-client@2.24.1(@types/dom-mediacapture-record@1.0.22))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(tslib@2.9.1)
+      '@livekit/protocol':
+        specifier: ^1.53.0
+        version: 1.53.0
       '@repo/engine':
         specifier: workspace:*
         version: link:../../packages/engine
       '@shadcn/react':
         specifier: ^0.3.1
         version: 0.3.1(@types/react@19.3.0)(react@19.3.1)
+      '@vercel/firewall':
+        specifier: ^1.2.6
+        version: 1.2.6
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -35,6 +41,9 @@ importers:
       livekit-client:
         specifier: ^2.24.1
         version: 2.24.1(@types/dom-mediacapture-record@1.0.22)
+      livekit-server-sdk:
+        specifier: ^2.20.0
+        version: 2.20.0
       lucide-react:
         specifier: ^1.75.0
         version: 1.75.0(@types/react@19.3.0)(react@19.3.1)
@@ -1756,6 +1765,10 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@vercel/firewall@1.2.6':
+    resolution: {integrity: sha512-89ybsa2rnVNdw6RI3jGOVvqUJaBj6Umm4IagC1o3PKtr/MXxBKOLek+yyUgF0csA0O5W+dzcpdIhKxVXhgVVtA==}
+    engines: {node: '>= 20'}
+
   acorn-jsx@5.3.2:
     resolution: {integrity: sha512-rq9s+JNhf0IChjtDXxllJ7g41oZk5SlXtp0LHwyA5cejwn7vKmKp4pPri6YEePv2PU65sAsegbXtIinmDFDXgQ==}
     peerDependencies:
@@ -2555,6 +2568,9 @@ packages:
     resolution: {integrity: sha512-AC/7JofJvZGrrneWNaEnJeOLUx+JlGt7tNa0wZiRPT4MY1wmfKjt2+6O2p2uz2+skll8OZZmJMNqeke7kKbNgQ==}
     hasBin: true
 
+  jose@5.10.0:
+    resolution: {integrity: sha512-s+3Al/p9g32Iq+oqXxkW//7jk2Vig6FF1CFqzVXoTUXt2qz89YWbL+OwS17NFYEvxC35n0FKeGO2LGYSxeM2Gg==}
+
   jose@6.2.17:
     resolution: {integrity: sha512-wOuK9V1yujQFH5S0ZWmLcDZN7+IKh9bUCC2ZPCf2HDlol3WWHy+PPyNjEI75FXRLMp3vDKQcupP59xhVU95hcg==}
 
@@ -2684,6 +2700,10 @@ packages:
     resolution: {integrity: sha512-8kkpTPuszlkza99XOV/QZVQG7M730i5gH52j0AZzsUMQpQfI9tEgW2JfDge7+Z2ZUUuBEtV3r2MYbALHFJ2HIg==}
     peerDependencies:
       '@types/dom-mediacapture-record': ^1
+
+  livekit-server-sdk@2.20.0:
+    resolution: {integrity: sha512-kkzvWp50q8oPGhJp7gpgGSPx2riQAzTZQXOBKz7ze58Be+dzdArneTbXM9ATZ5BdRFFvN+sxGEfGYyXAczLFig==}
+    engines: {node: '>=19'}
 
   locate-path@6.0.0:
     resolution: {integrity: sha512-iPZK6eYjbxRu3uB4/WZ3EsEIMJFMqAoopl3R+zuq0UjcAm/MO6KCweDgPfP3elTztoKP3KtnVHxTn2NHBSDVUw==}
@@ -5057,6 +5077,8 @@ snapshots:
   '@unrs/resolver-binding-win32-x64-msvc@1.13.0':
     optional: true
 
+  '@vercel/firewall@1.2.6': {}
+
   acorn-jsx@5.3.2(acorn@8.19.0):
     dependencies:
       acorn: 8.19.0
@@ -6063,6 +6085,8 @@ snapshots:
 
   jiti@2.7.0: {}
 
+  jose@5.10.0: {}
+
   jose@6.2.17: {}
 
   js-tokens@4.0.0: {}
@@ -6170,6 +6194,12 @@ snapshots:
       tslib: 2.8.1
       typed-emitter: 2.1.0
       webrtc-adapter: 9.0.6
+
+  livekit-server-sdk@2.20.0:
+    dependencies:
+      '@bufbuild/protobuf': 1.10.1
+      '@livekit/protocol': 1.53.0
+      jose: 5.10.0
 
   locate-path@6.0.0:
     dependencies:
