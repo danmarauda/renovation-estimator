@@ -67,8 +67,8 @@ body.ws { overflow-x: clip; }
 /* the poster: the default kitchen, shown from first paint until the live view is ready */
 .stage-poster { position: absolute; inset: 0; z-index: -1; width: 100%; height: 100%; object-fit: contain; pointer-events: none; transition: opacity 700ms var(--ease); }
 .stage.is-live .stage-poster { opacity: 0; }
-.stage.is-failed .stage-poster { display: none; }
-.stage.is-failed .stage-fallback { bottom: auto; top: 50%; translate: -50% -50%; }
+.stage.is-failed .stage-poster { opacity: 1; }
+.stage:not(.is-live) .stage-hint { display: none; }
 @media (prefers-reduced-motion: reduce) { #scene, .stage-poster, .stage::before { transition: none; } }
 #scene:active { cursor: grabbing; }
 #scene.is-pointing { cursor: pointer; }
@@ -77,19 +77,18 @@ body.ws { overflow-x: clip; }
   text-align: center; text-wrap: balance; font-size: 13px; line-height: 1.4; background: var(--ov-hover); color: var(--ov-ink); box-shadow: var(--ov-lift);
   -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
 
-/* overlays on the stage are opaque enough to read over any part of the kitchen */
-.stage-tools { position: absolute; top: 16px; right: 16px; z-index: 3; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--s2); max-width: calc(100% - 32px); }
-.stage .fg-pill { --pill-bg: var(--ov); background: var(--pill-bg); color: var(--ov-ink); gap: 6px; padding: 0 14px; font-size: 13px; font-weight: 400;
-  box-shadow: var(--ov-lift); -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2);
-  transition: background-color 600ms var(--ease), color 600ms var(--ease), transform var(--t-press) var(--ease); }
-.stage .fg-pill .i { width: 17px; height: 17px; }
-.stage .fg-pill:hover { background: var(--ov-hover); }
-.stage .fg-pill[aria-pressed="true"] { background: var(--ov-press); color: var(--ov-ink); font-weight: 500; }
-.time-seg { flex-wrap: nowrap; gap: 2px; padding: 3px; border-radius: 999px; background: var(--ov); box-shadow: var(--ov-lift);
-  -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2); transition: background-color 600ms var(--ease); }
-.time-seg .fg-pill { box-shadow: none; --pill-bg: transparent; background: transparent; min-height: 38px; -webkit-backdrop-filter: none; backdrop-filter: none; }
-.time-seg .fg-pill:hover { background: color-mix(in srgb, var(--ov-press) 45%, transparent); }
-.time-seg .fg-pill[aria-pressed="true"] { background: var(--ov-press); box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
+.stage-tools { display: flex; align-items: center; gap: var(--s2); }
+.stage-tools .fg-pill { min-width: 44px; min-height: 44px; padding: 0 12px; gap: 6px; border: 1px solid var(--rule); background: var(--st-2); color: var(--ink); font: 500 14px/1 var(--font); white-space: nowrap;
+  transition: background-color 100ms ease-out, transform 100ms ease-out; }
+.stage-tools .fg-pill .i { width: 16px; height: 16px; }
+.stage-tools .fg-pill:not(:disabled):hover { background: var(--st-4); }
+.stage-tools .fg-pill:not(:disabled):active { transform: scale(.97); }
+.stage-tools .fg-pill[aria-pressed="true"] { background: var(--st-3); border-color: var(--rail-active); }
+.stage-tools .fg-pill:disabled { opacity: 1; color: var(--ink-2); box-shadow: none; }
+.stage-tools > .fg-pill:disabled { background: transparent; }
+.stage-tools .time-seg { display: flex; flex-wrap: nowrap; padding: 2px; gap: 2px; border: 1px solid var(--rule); border-radius: 999px; background: var(--st-2); }
+.time-seg .fg-pill:not([aria-pressed="true"]) { background: transparent; border-color: transparent; }
+@media (prefers-reduced-motion: reduce) { .stage-tools .fg-pill { transition: none; } .stage-tools .fg-pill:not(:disabled):active { transform: none; } }
 
 .stage-hint { position: absolute; left: 16px; bottom: 16px; z-index: 2; display: inline-flex; align-items: center; gap: 8px; margin: 0;
   padding: 9px 14px; border-radius: 999px; background: var(--ov); color: var(--ov-ink-2); font-size: 13px; box-shadow: var(--ov-lift);

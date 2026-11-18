@@ -1,0 +1,420 @@
+'use client';
+
+import { useEffect, useRef, useState, type ComponentProps } from 'react';
+import { useChat } from '@livekit/components-react';
+import { Track } from 'livekit-client';
+import { Loader, MessageSquareTextIcon, SendHorizontal } from 'lucide-react';
+import { motion, type MotionProps } from 'motion/react';
+
+import { cn } from '@/lib/utils';
+import { AgentDisconnectButton } from '@/components/agents-ui/agent-disconnect-button';
+import { AgentTrackControl } from '@/components/agents-ui/agent-track-control';
+import {
+  AgentTrackToggle,
+  agentTrackToggleVariants,
+} from '@/components/agents-ui/agent-track-toggle';
+import { Button } from '@/components/ui/button';
+import { Toggle } from '@/components/ui/toggle';
+import {
+  useInputControls,
+  usePublishPermissions,
+  type UseInputControlsProps,
+} from '@/hooks/agents-ui/use-agent-control-bar';
+
+const LK_TOGGLE_VARIANT_1 = [
+  'data-[state=off]:bg-accent data-[state=off]:hover:bg-foreground/10',
+  'data-[state=off]:[&_~_button]:bg-accent data-[state=off]:[&_~_button]:hover:bg-foreground/10',
+  'data-[state=off]:border-border data-[state=off]:hover:border-foreground/12',
+  'data-[state=off]:[&_~_button]:border-border data-[state=off]:[&_~_button]:hover:border-foreground/12',
+  'data-[state=off]:text-destructive data-[state=off]:hover:text-destructive data-[state=off]:focus:text-destructive',
+  'data-[state=off]:focus-visible:ring-foreground/12 data-[state=off]:focus-visible:border-ring',
+  'dark:data-[state=off]:[&_~_button]:bg-accent dark:data-[state=off]:[&_~_button]:hover:bg-foreground/10',
+];
+
+const LK_TOGGLE_VARIANT_2 = [
+  'data-[state=off]:bg-accent data-[state=off]:hover:bg-foreground/10',
+  'data-[state=off]:border-border data-[state=off]:hover:border-foreground/12',
+  'data-[state=off]:focus-visible:border-ring data-[state=off]:focus-visible:ring-foreground/12',
+  'data-[state=off]:text-foreground data-[state=off]:hover:text-foreground data-[state=off]:focus:text-foreground',
+  'data-[state=on]:bg-blue-500/20 data-[state=on]:hover:bg-blue-500/30',
+  'data-[state=on]:border-blue-700/10 data-[state=on]:text-blue-700 data-[state=on]:ring-blue-700/30',
+  'data-[state=on]:focus-visible:border-blue-700/50',
+  'dark:data-[state=on]:bg-blue-500/20 dark:data-[state=on]:text-blue-300',
+];
+
+const MOTION_PROPS: MotionProps = {
+  variants: {
+    hidden: {
+      height: 0,
+      opacity: 0,
+      marginBottom: 0,
+    },
+    visible: {
+      height: 'auto',
+      opacity: 1,
+      marginBottom: 12,
+    },
+  },
+  initial: 'hidden',
+  transition: {
+    duration: 0.3,
+    ease: 'easeOut',
+  },
+};
+
+interface AgentChatInputProps {
+  chatOpen: boolean;
+  persistent?: boolean;
+  onSend: (message: string) => Promise<void>;
+  className?: string;
+}
+
+function AgentChatInput({ chatOpen, persistent = false, onSend, className }: AgentChatInputProps) {
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const sending = useRef(false);
+  const [isSending, setIsSending] = useState(false);
+  const [message, setMessage] = useState('');
+  const [failed, setFailed] = useState(false);
+  const isDisabled = !chatOpen || isSending || message.trim().length === 0;
+
+  const handleSend = async () => {
+    if (isDisabled || sending.current) return;
+
+    sending.current = true;
+    setIsSending(true);
+    setFailed(false);
+    try {
+      await onSend(message.trim());
+      setMessage('');
+    } catch {
+      setFailed(true);
+    } finally {
+      sending.current = false;
+      setIsSending(false);
+    }
+  };
+
+  const handleKeyDown = async (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  const handleButtonClick = async () => {
+    if (isDisabled) return;
+    await handleSend();
+  };
+
+  useEffect(() => {
+    if (chatOpen && !persistent) inputRef.current?.focus();
+  }, [chatOpen, persistent]);
+
+  return (
+    <div className={cn('flex w-full flex-col gap-2 text-sm', !persistent && 'mb-3 pl-1', className)}>
+      <div className="flex items-end gap-2">
+        <textarea
+          ref={inputRef}
+          value={message}
+          disabled={!chatOpen}
+          readOnly={isSending}
+          aria-label="Message the kitchen assistant"
+          placeholder="Message the kitchen assistant"
+          onKeyDown={handleKeyDown}
+          onChange={(e) => setMessage(e.target.value)}
+          className="field-sizing-content min-w-0 max-h-24 min-h-11 flex-1 resize-none rounded-md px-2 py-2 [scrollbar-width:thin] disabled:cursor-not-allowed"
+        />
+        <Button
+          size="icon"
+          type="button"
+          disabled={isDisabled}
+          variant={isDisabled ? 'secondary' : 'default'}
+          aria-label={isSending ? 'Sending message' : 'Send message'}
+          onClick={handleButtonClick}
+          className="self-end disabled:cursor-not-allowed"
+        >
+          {isSending ? <Loader className="motion-safe:animate-spin" aria-hidden="true" /> : <SendHorizontal aria-hidden="true" />}
+        </Button>
+      </div>
+      {failed && <p role="alert">Message not sent. Try again.</p>}
+    </div>
+  );
+}
+
+/** Configuration for which controls to display in the AgentControlBar. */
+export interface AgentControlBarControls {
+  /**
+   * Whether to show the leave/disconnect button.
+   *
+   * @defaultValue true
+   */
+  leave?: boolean;
+  /**
+   * Whether to show the camera toggle control.
+   *
+   * @defaultValue true (if camera publish permission is granted)
+   */
+  camera?: boolean;
+  /**
+   * Whether to show the microphone toggle control.
+   *
+   * @defaultValue true (if microphone publish permission is granted)
+   */
+  microphone?: boolean;
+  /**
+   * Whether to show the screen share toggle control.
+   *
+   * @defaultValue true (if screen share publish permission is granted)
+   */
+  screenShare?: boolean;
+  /**
+   * Whether to show the chat toggle control.
+   *
+   * @defaultValue true (if data publish permission is granted)
+   */
+  chat?: boolean;
+}
+
+export interface AgentControlBarProps extends UseInputControlsProps {
+  /**
+   * The visual style of the control bar.
+   *
+   * @default 'default'
+   */
+  variant?: 'default' | 'outline' | 'livekit';
+  /**
+   * This takes an object with the following keys: `leave`, `microphone`, `screenShare`, `camera`,
+   * `chat`. Each key maps to a boolean value that determines whether the control is displayed.
+   *
+   * @default
+   * {
+   *   leave: true,
+   *   microphone: true,
+   *   screenShare: true,
+   *   camera: true,
+   *   chat: true,
+   * }
+   */
+  controls?: AgentControlBarControls;
+  /**
+   * Whether to save user choices.
+   *
+   * @default true
+   */
+  saveUserChoices?: boolean;
+  /**
+   * Whether the agent is connected to a session.
+   *
+   * @default false
+   */
+  isConnected?: boolean;
+  /**
+   * Whether the chat input interface is open.
+   *
+   * @default false
+   */
+  isChatOpen?: boolean;
+  chatMode?: 'toggle' | 'always';
+  /** The callback for when the user disconnects. */
+  onDisconnect?: () => void;
+  /** The callback for when the chat is opened or closed. */
+  onIsChatOpenChange?: (open: boolean) => void;
+  /** The callback for when a device error occurs. */
+  onDeviceError?: (error: { source: Track.Source; error: Error }) => void;
+}
+
+/**
+ * A control bar specifically designed for voice assistant interfaces. Provides controls for
+ * microphone, camera, screen share, chat, and disconnect. Includes an expandable chat input for
+ * text-based interaction with the agent.
+ *
+ * @example
+ *
+ * ```tsx
+ * <AgentControlBar
+ *   variant="livekit"
+ *   isConnected={true}
+ *   onDisconnect={() => handleDisconnect()}
+ *   controls={{
+ *     microphone: true,
+ *     camera: true,
+ *     screenShare: false,
+ *     chat: true,
+ *     leave: true,
+ *   }}
+ * />;
+ * ```
+ *
+ * @extends ComponentProps<'div'>
+ */
+export function AgentControlBar({
+  variant = 'default',
+  controls,
+  isChatOpen = false,
+  chatMode = 'toggle',
+  isConnected = false,
+  saveUserChoices = true,
+  onDisconnect,
+  onDeviceError,
+  onIsChatOpenChange,
+  className,
+  ...props
+}: AgentControlBarProps & ComponentProps<'div'>) {
+  const { send } = useChat();
+  const publishPermissions = usePublishPermissions();
+  const [isChatOpenUncontrolled, setIsChatOpenUncontrolled] = useState(isChatOpen);
+  const {
+    microphoneTrack,
+    cameraToggle,
+    microphoneToggle,
+    screenShareToggle,
+    handleAudioDeviceChange,
+    handleVideoDeviceChange,
+    handleMicrophoneDeviceSelectError,
+    handleCameraDeviceSelectError,
+  } = useInputControls({ onDeviceError, saveUserChoices });
+
+  const handleSendMessage = async (message: string) => {
+    await send(message);
+  };
+
+  const visibleControls = {
+    leave: controls?.leave ?? true,
+    microphone: controls?.microphone ?? publishPermissions.microphone,
+    screenShare: controls?.screenShare ?? publishPermissions.screenShare,
+    camera: controls?.camera ?? publishPermissions.camera,
+    chat: controls?.chat ?? publishPermissions.data,
+  };
+
+  const always = chatMode === 'always';
+  const chatOpen = onIsChatOpenChange ? isChatOpen : isChatOpenUncontrolled;
+  const isEmpty = Object.values(visibleControls).every((value) => !value);
+
+  if (isEmpty) {
+    console.warn('AgentControlBar: `visibleControls` contains only false values.');
+    return null;
+  }
+
+  return (
+    <div
+      aria-label="Voice assistant controls"
+      className={cn(
+        '@container/agent-control-bar bg-background border-input/50 dark:border-muted flex flex-col border p-3 drop-shadow-md/3',
+        variant === 'livekit' ? 'rounded-[31px]' : 'rounded-lg',
+        className,
+      )}
+      {...props}
+    >
+      {visibleControls.chat && (always ? (
+        <AgentChatInput chatOpen={isConnected} persistent onSend={handleSendMessage} />
+      ) : (
+        <motion.div
+          {...MOTION_PROPS}
+          inert={!chatOpen}
+          animate={chatOpen ? 'visible' : 'hidden'}
+          className="border-input/50 flex w-full items-start overflow-hidden border-b"
+        >
+          <AgentChatInput chatOpen={chatOpen} onSend={handleSendMessage} className={cn(variant === 'livekit' && '[&_button]:rounded-full')} />
+        </motion.div>
+      ))}
+
+      <div className="flex gap-1">
+        <div className="flex grow gap-1">
+          {/* Toggle Microphone */}
+          {visibleControls.microphone && (
+            <AgentTrackControl
+              variant={variant === 'outline' ? 'outline' : 'default'}
+              kind="audioinput"
+              aria-label="Toggle microphone"
+              source={Track.Source.Microphone}
+              pressed={microphoneToggle.enabled}
+              disabled={microphoneToggle.pending || (always && !isConnected)}
+              audioTrack={microphoneTrack}
+              onPressedChange={microphoneToggle.toggle}
+              onActiveDeviceChange={handleAudioDeviceChange}
+              onMediaDeviceError={handleMicrophoneDeviceSelectError}
+              className={cn(
+                variant === 'livekit' && [
+                  LK_TOGGLE_VARIANT_1,
+                  'rounded-full [&_button:first-child]:rounded-l-full [&_button:last-child]:rounded-r-full',
+                ],
+              )}
+            />
+          )}
+
+          {/* Toggle Camera */}
+          {visibleControls.camera && (
+            <AgentTrackControl
+              variant={variant === 'outline' ? 'outline' : 'default'}
+              kind="videoinput"
+              aria-label="Toggle camera"
+              source={Track.Source.Camera}
+              pressed={cameraToggle.enabled}
+              pending={cameraToggle.pending}
+              disabled={cameraToggle.pending}
+              onPressedChange={cameraToggle.toggle}
+              onMediaDeviceError={handleCameraDeviceSelectError}
+              onActiveDeviceChange={handleVideoDeviceChange}
+              className={cn(
+                variant === 'livekit' && [
+                  LK_TOGGLE_VARIANT_1,
+                  'rounded-full [&_button:first-child]:rounded-l-full [&_button:last-child]:rounded-r-full',
+                ],
+              )}
+            />
+          )}
+
+          {/* Toggle Screen Share */}
+          {visibleControls.screenShare && (
+            <AgentTrackToggle
+              variant={variant === 'outline' ? 'outline' : 'default'}
+              aria-label="Toggle screen share"
+              source={Track.Source.ScreenShare}
+              pressed={screenShareToggle.enabled}
+              disabled={screenShareToggle.pending}
+              onPressedChange={screenShareToggle.toggle}
+              className={cn(variant === 'livekit' && [LK_TOGGLE_VARIANT_2, 'rounded-full'])}
+            />
+          )}
+
+          {/* Toggle Transcript */}
+          {visibleControls.chat && !always && (
+            <Toggle
+              variant={variant === 'outline' ? 'outline' : 'default'}
+              pressed={chatOpen}
+              aria-label="Toggle transcript"
+              onPressedChange={(state) => {
+                if (!onIsChatOpenChange) setIsChatOpenUncontrolled(state);
+                else onIsChatOpenChange(state);
+              }}
+              className={agentTrackToggleVariants({
+                variant: variant === 'outline' ? 'outline' : 'default',
+                className: cn(variant === 'livekit' && [LK_TOGGLE_VARIANT_2, 'rounded-full']),
+              })}
+            >
+              <MessageSquareTextIcon />
+            </Toggle>
+          )}
+        </div>
+
+        {/* Disconnect */}
+        {visibleControls.leave && (
+          <AgentDisconnectButton
+            onClick={onDisconnect}
+            aria-label="End call"
+            disabled={!isConnected}
+            className={cn(
+              variant === 'livekit' &&
+                'bg-destructive/10 dark:bg-destructive/10 text-destructive hover:bg-destructive/20 dark:hover:bg-destructive/20 focus:bg-destructive/20 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/4 rounded-full font-mono text-xs font-bold tracking-wider',
+            )}
+          >
+            <span className="sr-only @sm/agent-control-bar:not-sr-only uppercase">
+              End <span className="sr-only @md/agent-control-bar:not-sr-only">call</span>
+            </span>
+          </AgentDisconnectButton>
+        )}
+      </div>
+    </div>
+  );
+}

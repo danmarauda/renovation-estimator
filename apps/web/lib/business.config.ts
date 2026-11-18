@@ -52,7 +52,7 @@ const config: BusinessConfig = {
       name: 'Kitchen',
       title: 'Design your',
       titleEm: 'new kitchen',
-      intro: 'Click anything in the kitchen, or pick a part below. The estimate updates as you choose.',
+      intro: 'Click anything in the kitchen, or choose a part from the left rail. The estimate updates as you choose.',
       sizes: [
         { id: 'small', name: 'Small', note: 'approx. 10 m²', areaM2: 10, factor: 0.8 },
         { id: 'medium', name: 'Medium', note: 'approx. 14 m²', areaM2: 14, factor: 1 },
@@ -61,11 +61,6 @@ const config: BusinessConfig = {
       defaultSize: 'medium',
       sizeNote: 'Size adjusts the allowance only, not the illustrative 3D layout.',
       measurementNote: 'Illustrative dimensions only. Confirm measurements and appliance clearances on site.',
-      measurements: [
-        { name: 'Benchtop height', value: 920 },
-        { name: 'Benchtop depth', value: 625 },
-        { name: 'Ceiling height', value: 2600 },
-      ],
       base: { name: 'Demolition, plumbing, electrical and approvals', price: [9500, 15500], scales: true },
 
       parts: [

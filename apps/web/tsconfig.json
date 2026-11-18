@@ -2,6 +2,7 @@
   "extends": "@repo/typescript-config/base.json",
   "compilerOptions": {
     "jsx": "react-jsx",
+    "paths": { "@/*": ["./*"] },
     "esModuleInterop": true,
     "incremental": true,
     "types": ["node", "react", "react-dom"],

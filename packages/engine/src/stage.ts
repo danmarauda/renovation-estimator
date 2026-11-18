@@ -330,21 +330,24 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
   }
 
   // ---------------------------------------------------------------- keyboard orbit on the canvas
-  function onKeyDown(e: KeyboardEvent) {
-    if (!controls.enabled) return;
+  function moveCamera(action: string) {
+    if (!controls.enabled) return false;
     const step = 0.14;
-    let used = true;
-    switch (e.key) {
-      case 'ArrowLeft': controls.rotateLeft(-step); break;
-      case 'ArrowRight': controls.rotateLeft(step); break;
-      case 'ArrowUp': controls.rotateUp(step * 0.6); break;
-      case 'ArrowDown': controls.rotateUp(-step * 0.6); break;
-      case '+': case '=': controls.dollyIn(1.12); controls.update(); break;
-      case '-': case '_': controls.dollyOut(1.12); controls.update(); break;
-      case 'Home': case '0': e.preventDefault(); resetView(); return;
-      default: used = false;
+    switch (action) {
+      case 'left': controls.rotateLeft(-step); break;
+      case 'right': controls.rotateLeft(step); break;
+      case 'up': controls.rotateUp(step * 0.6); break;
+      case 'down': controls.rotateUp(-step * 0.6); break;
+      case 'zoom_in': controls.dollyIn(1.12); break;
+      case 'zoom_out': controls.dollyOut(1.12); break;
+      case 'whole': resetView(); return true;
+      default: return false;
     }
-    if (used) { cancelCameraMove(); e.preventDefault(); controls.update(); invalidate(); }
+    cancelCameraMove(); controls.update(); invalidate(); return true;
+  }
+  const keyActions: Record<string, string> = { ArrowLeft:'left', ArrowRight:'right', ArrowUp:'up', ArrowDown:'down', '+':'zoom_in', '=':'zoom_in', '-':'zoom_out', '_':'zoom_out', Home:'whole', '0':'whole' };
+  function onKeyDown(e: KeyboardEvent) {
+    if (moveCamera(keyActions[e.key])) e.preventDefault();
   }
   canvas.addEventListener('keydown', onKeyDown);
 
@@ -413,7 +416,7 @@ export function createStage({ canvas, host, reducedMotion, edgeColor = '#D9A441'
       refreshOutline();
       invalidate({ shadows: true });
     },
-    flyTo, resetView, arrive, poseArrival, select, preview, pulse, crossfade, setEvening, partAt, invalidate, dispose, setQuality,
+    moveCamera, flyTo, resetView, arrive, poseArrival, select, preview, pulse, crossfade, setEvening, partAt, invalidate, dispose, setQuality,
     setAutoRotate(on: boolean) { autoRotate = on; controls.autoRotate = on; invalidate(); },
     get autoRotate() { return autoRotate; },
     get quality() { return tier; },

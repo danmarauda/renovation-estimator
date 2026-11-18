@@ -14,31 +14,55 @@ interface Step { id: string; name: string; icon: string; view: HTMLElement; head
 export function createPanel({ room, state, reducedMotion, signal, on }: PanelOptions) {
   const listen = <K extends keyof HTMLElementEventMap>(el: HTMLElement, type: K, handler: (e: HTMLElementEventMap[K]) => void) => el.addEventListener(type, handler, { signal });
   const el = {
-    dock: $('#dock'), sizes: $('#sizes'), viewSize: $('#viewSize'), options: $('#options'), viewSummary: $('#viewSummary'),
-    breakdown: $('#breakdown'), total: $('#bdTotal'), bdSize: $('#bdSize'), sizeChip: $('#sizeChip'), sizeBtn: $('#sizeBtn'), breakdownBtn: $('#breakdownBtn'),
-    prev: $('#stepPrev'), next: $('#stepNext'), delta: $('#delta'), live: $('#live'),
+    dock: $('#dock'), viewSize: $('#viewSize'), options: $('#options'), viewSummary: $('#viewSummary'),
+    breakdown: $('#breakdown'), total: $('#bdTotal'), bdSize: $('#bdSize'), sizeBtn: $('#sizeBtn'), breakdownBtn: $('#breakdownBtn'),
+    prev: $('#stepPrev'), delta: $('#delta'), live: $('#live'),
   };
 
   // ---------------------------------------------------------------- steps: size, every part, then the estimate
   const steps: Step[] = [
-    { id: 'size', name: 'Size', icon: 'size', view: el.viewSize, heading: '#sizeLabel' },
+    { id: 'size', name: 'Measurements', icon: 'size', view: el.viewSize, heading: '#sizeLabel' },
     ...room.parts.map((p) => ({ id: p.id, name: p.name, icon: p.icon, part: p, view: el.options, heading: '#optTitle' })),
     { id: 'summary', name: 'Estimate', icon: 'summary', view: el.viewSummary, heading: '#bdLabel' },
   ];
   const stepOf = (id: string) => steps.find((s) => s.id === id) || steps[0];
-  const rule = '<span class="dock-rule" aria-hidden="true"></span>';
-  el.dock.innerHTML = steps.map((s, i) => `${i === 1 || i === steps.length - 1 ? rule : ''}<button class="step" type="button" data-step="${esc(s.id)}" aria-controls="inspector">${icon(s.icon)}<span>${esc(s.name)}</span></button>`).join('');
+  const split = Math.ceil(steps.length / 2);
+  for (const [selector, group] of [['first', steps.slice(0, split)], ['last', steps.slice(split)]] as const) {
+    $(`[data-steps="${selector}"]`, el.dock).innerHTML = group.map(s => `<button class="step" type="button" data-step="${esc(s.id)}" aria-controls="inspector" aria-label="${esc(s.name)}">${icon(s.icon)}</button>`).join('');
+  }
   listen(el.dock, 'click', (e) => { const b = (e.target as Element).closest<HTMLElement>('[data-step]'); if (b?.dataset.step) on.selectStep(b.dataset.step, 'dock'); });
+  const label = $('#rail-label');
+  let labelTimer = 0;
+  function hideLabel() { clearTimeout(labelTimer); label.removeAttribute('data-open'); }
+  function showLabel(target: EventTarget | null) {
+    const button = target instanceof Element ? target.closest<HTMLElement>('button[data-step]') : null;
+    if (!button) { hideLabel(); return; }
+    clearTimeout(labelTimer);
+    const rect = button.getBoundingClientRect();
+    label.textContent = button.getAttribute('aria-label');
+    label.style.left = `${Math.max(4, Math.min(innerWidth - label.offsetWidth - 4, rect.left + (rect.width - label.offsetWidth) / 2))}px`;
+    label.style.top = `${rect.top - 8}px`;
+    label.setAttribute('data-open', '');
+  }
+  const delayHide = () => { clearTimeout(labelTimer); labelTimer = window.setTimeout(hideLabel, 150); };
+  listen(el.dock, 'pointerover', (e) => { if (e.pointerType !== 'touch') showLabel(e.target); });
+  listen(el.dock, 'focusin', (e) => { if ((e.target as Element).matches(':focus-visible')) showLabel(e.target); });
+  listen(el.dock, 'pointerleave', delayHide); listen(el.dock, 'focusout', hideLabel);
+  listen(el.dock, 'click', hideLabel); listen(label, 'pointerenter', () => clearTimeout(labelTimer));
+  listen(label, 'pointerleave', delayHide);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideLabel(); }, { signal });
+  window.addEventListener('scroll', hideLabel, { capture: true, passive: true, signal });
+  window.addEventListener('resize', hideLabel, { signal });
   const partUnder = (target: EventTarget | null) => { const id = (target as Element).closest<HTMLElement>('[data-step]')?.dataset.step; return id && stepOf(id).part ? id : null; };
   for (const type of ['pointerover', 'focusin'] as const) listen(el.dock, type, (e) => on.previewPart(partUnder(e.target)));
   for (const type of ['pointerleave', 'focusout'] as const) listen(el.dock, type, () => on.previewPart(null));
-  for (const b of [el.prev, el.next]) listen(b, 'click', () => { if (b.dataset.step) on.selectStep(b.dataset.step, 'stepper'); });
+  listen(el.prev, 'click', () => { if (el.prev.dataset.step) on.selectStep(el.prev.dataset.step, 'stepper'); });
   for (const b of [el.sizeBtn, el.breakdownBtn]) listen(b, 'click', () => { if (b.dataset.step) on.selectStep(b.dataset.step, 'shortcut'); });
 
   // the dock scrolls sideways under the kitchen and downwards as the rail of a phone on its side
   function centreInDock(button: HTMLElement | null) {
-    const dock = el.dock;
-    if (!button || (dock.scrollWidth <= dock.clientWidth && dock.scrollHeight <= dock.clientHeight)) return;
+    const dock = button?.parentElement;
+    if (!button || !dock || dock.scrollWidth <= dock.clientWidth) return;
     dock.scrollTo({
       left: button.offsetLeft - (dock.clientWidth - button.offsetWidth) / 2,
       top: button.offsetTop - (dock.clientHeight - button.offsetHeight) / 2,
@@ -60,25 +84,6 @@ export function createPanel({ room, state, reducedMotion, signal, on }: PanelOpt
     required('span', button).textContent = label || '';
     button.setAttribute('aria-label', name || step.name);
   }
-
-  // ---------------------------------------------------------------- size
-  el.sizes.innerHTML = room.sizes.map((s) => `<button class="opt" type="button" role="radio" aria-checked="false" tabindex="-1" data-size="${esc(s.id)}">
-    <span class="sw ic txt" aria-hidden="true">${esc(s.name.charAt(0))}</span><span><span class="nm">${esc(s.name)}</span><span class="pr">${esc(s.note)}</span></span>
-    <span class="ok" aria-hidden="true">${icon('check')}</span></button>`).join('');
-  function pickSize(button: HTMLElement, focus: boolean) {
-    const id = button.dataset.size;
-    if (!id) return;
-    if (state.size !== id) { state.size = id; on.change(null); }
-    if (focus) button.focus();
-  }
-  listen(el.sizes, 'click', (e) => { const b = (e.target as Element).closest<HTMLElement>('[data-size]'); if (b) pickSize(b, false); });
-  listen(el.sizes, 'keydown', (e) => {
-    const b = (e.target as Element).closest<HTMLElement>('[data-size]'), dir = ARROWS[e.key];
-    if (!b || !dir || !b.parentElement) return;
-    e.preventDefault();
-    const all = [...el.sizes.querySelectorAll<HTMLElement>('[data-size]')];
-    pickSize(all[(all.indexOf(b) + dir + all.length) % all.length], true);
-  });
 
   // ---------------------------------------------------------------- options
   function swatch(o: Option) {
@@ -175,20 +180,12 @@ export function createPanel({ room, state, reducedMotion, signal, on }: PanelOpt
       if (b.dataset.step === step.id) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
     });
     for (const view of [el.viewSize, el.options, el.viewSummary]) view.hidden = view !== step.view;
-    el.sizes.querySelectorAll<HTMLElement>('[data-size]').forEach((b) => {
-      const checked = b.dataset.size === state.size;
-      b.setAttribute('aria-checked', String(checked));
-      b.tabIndex = checked ? 0 : -1;
-    });
     const size = room.sizes.find((s) => s.id === state.size) || room.sizes[0];
-    el.sizeChip.textContent = `${size.name} kitchen`;
-    el.sizeBtn.setAttribute('aria-label', `${size.name} kitchen. Change kitchen size`);
-    el.bdSize.textContent = `${size.name} kitchen, ${size.note}`;
+    el.bdSize.textContent = `${size.name} pricing allowance, ${size.note}`;
     if (step.part) renderOptions(step.part);
     renderBreakdown(t);
-    const prev = steps[index - 1], next = steps[index + 1];
+    const prev = steps[index - 1];
     setStepButton(el.prev, prev, 'Back', prev && `Back to ${prev.name}`);
-    setStepButton(el.next, next, next && `Next: ${next.name}`, next && `Next: ${next.name}`);
     if (shownStep !== step.id) {
       shownStep = step.id;
       centreInDock(el.dock.querySelector<HTMLElement>('[aria-current="step"]'));
@@ -204,11 +201,12 @@ export function createPanel({ room, state, reducedMotion, signal, on }: PanelOpt
 
   return {
     update,
+    pick,
     isPart: (id: string) => !!stepOf(id).part && stepOf(id).id === id,
     focusHeading() { const step = stepOf(state.active); $(step.heading, step.view)?.focus({ preventScroll: true }); },
     get totals() { return totals(room, state.choices, state.size); },
     dispose() {
-      cancelAnimationFrame(raf); cancelAnimationFrame(turnFrame); clearTimeout(deltaTimer); clearTimeout(liveTimer);
+      hideLabel(); cancelAnimationFrame(raf); cancelAnimationFrame(turnFrame); clearTimeout(deltaTimer); clearTimeout(liveTimer);
       turned.removeEventListener('change', onTurn);
     },
   };

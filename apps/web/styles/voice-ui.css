@@ -1,0 +1,24 @@
+@layer theme, base, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+@source '../components/agents-ui';
+@source '../components/ui';
+
+@theme inline {
+  --color-background: var(--st-3);
+  --color-foreground: var(--ink);
+  --color-muted: var(--st-2);
+  --color-muted-foreground: var(--ink-2);
+  --color-border: var(--rule);
+  --color-input: var(--rule);
+  --color-destructive: var(--ink-2);
+  --color-primary: var(--brand);
+  --color-primary-foreground: var(--on-brand);
+  --color-secondary: var(--st-2);
+  --color-secondary-foreground: var(--ink);
+  --color-accent: var(--st-4);
+  --color-accent-foreground: var(--ink);
+  --color-popover: var(--st-3);
+  --color-popover-foreground: var(--ink);
+  --color-ring: var(--focus);
+}
