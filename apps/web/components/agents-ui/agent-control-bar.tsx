@@ -64,28 +64,32 @@ const MOTION_PROPS: MotionProps = {
 
 interface AgentChatInputProps {
   chatOpen: boolean;
-  onSend?: (message: string) => void;
+  persistent?: boolean;
+  onSend: (message: string) => Promise<void>;
   className?: string;
 }
 
-function AgentChatInput({ chatOpen, onSend = async () => {}, className }: AgentChatInputProps) {
+function AgentChatInput({ chatOpen, persistent = false, onSend, className }: AgentChatInputProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const sending = useRef(false);
   const [isSending, setIsSending] = useState(false);
-  const [message, setMessage] = useState<string>('');
-  const isDisabled = isSending || message.trim().length === 0;
+  const [message, setMessage] = useState('');
+  const [failed, setFailed] = useState(false);
+  const isDisabled = !chatOpen || isSending || message.trim().length === 0;
 
   const handleSend = async () => {
-    if (isDisabled) {
-      return;
-    }
+    if (isDisabled || sending.current) return;
 
+    sending.current = true;
+    setIsSending(true);
+    setFailed(false);
     try {
-      setIsSending(true);
       await onSend(message.trim());
       setMessage('');
-    } catch (error) {
-      console.error(error);
+    } catch {
+      setFailed(true);
     } finally {
+      sending.current = false;
       setIsSending(false);
     }
   };
@@ -104,35 +108,36 @@ function AgentChatInput({ chatOpen, onSend = async () => {}, className }: AgentC
   };
 
   useEffect(() => {
-    if (chatOpen) return;
-    // when not disabled refocus on input
-    inputRef.current?.focus();
-  }, [chatOpen]);
+    if (chatOpen && !persistent) inputRef.current?.focus();
+  }, [chatOpen, persistent]);
 
   return (
-    <div className={cn('mb-3 flex grow items-end gap-2 rounded-md pl-1 text-sm', className)}>
-      <textarea
-        autoFocus
-        ref={inputRef}
-        value={message}
-        disabled={!chatOpen || isSending}
-        aria-label="Message the kitchen assistant"
-        placeholder="Message the kitchen assistant"
-        onKeyDown={handleKeyDown}
-        onChange={(e) => setMessage(e.target.value)}
-        className="field-sizing-content max-h-16 min-h-8 flex-1 resize-none py-2 [scrollbar-width:thin] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-      />
-      <Button
-        size="icon"
-        type="button"
-        disabled={isDisabled}
-        variant={isDisabled ? 'secondary' : 'default'}
-        title={isSending ? 'Sending...' : 'Send'}
-        onClick={handleButtonClick}
-        className="self-end disabled:cursor-not-allowed"
-      >
-        {isSending ? <Loader className="animate-spin" /> : <SendHorizontal />}
-      </Button>
+    <div className={cn('flex w-full flex-col gap-2 text-sm', !persistent && 'mb-3 pl-1', className)}>
+      <div className="flex items-end gap-2">
+        <textarea
+          ref={inputRef}
+          value={message}
+          disabled={!chatOpen}
+          readOnly={isSending}
+          aria-label="Message the kitchen assistant"
+          placeholder="Message the kitchen assistant"
+          onKeyDown={handleKeyDown}
+          onChange={(e) => setMessage(e.target.value)}
+          className="field-sizing-content min-w-0 max-h-24 min-h-11 flex-1 resize-none rounded-md px-2 py-2 [scrollbar-width:thin] disabled:cursor-not-allowed"
+        />
+        <Button
+          size="icon"
+          type="button"
+          disabled={isDisabled}
+          variant={isDisabled ? 'secondary' : 'default'}
+          aria-label={isSending ? 'Sending message' : 'Send message'}
+          onClick={handleButtonClick}
+          className="self-end disabled:cursor-not-allowed"
+        >
+          {isSending ? <Loader className="motion-safe:animate-spin" aria-hidden="true" /> : <SendHorizontal aria-hidden="true" />}
+        </Button>
+      </div>
+      {failed && <p role="alert">Message not sent. Try again.</p>}
     </div>
   );
 }
@@ -210,6 +215,7 @@ export interface AgentControlBarProps extends UseInputControlsProps {
    * @default false
    */
   isChatOpen?: boolean;
+  chatMode?: 'toggle' | 'always';
   /** The callback for when the user disconnects. */
   onDisconnect?: () => void;
   /** The callback for when the chat is opened or closed. */
@@ -246,6 +252,7 @@ export function AgentControlBar({
   variant = 'default',
   controls,
   isChatOpen = false,
+  chatMode = 'toggle',
   isConnected = false,
   saveUserChoices = true,
   onDisconnect,
@@ -280,6 +287,8 @@ export function AgentControlBar({
     chat: controls?.chat ?? publishPermissions.data,
   };
 
+  const always = chatMode === 'always';
+  const chatOpen = onIsChatOpenChange ? isChatOpen : isChatOpenUncontrolled;
   const isEmpty = Object.values(visibleControls).every((value) => !value);
 
   if (isEmpty) {
@@ -297,18 +306,18 @@ export function AgentControlBar({
       )}
       {...props}
     >
-      <motion.div
-        {...MOTION_PROPS}
-        inert={!(isChatOpen || isChatOpenUncontrolled)}
-        animate={isChatOpen || isChatOpenUncontrolled ? 'visible' : 'hidden'}
-        className="border-input/50 flex w-full items-start overflow-hidden border-b"
-      >
-        <AgentChatInput
-          chatOpen={isChatOpen || isChatOpenUncontrolled}
-          onSend={handleSendMessage}
-          className={cn(variant === 'livekit' && '[&_button]:rounded-full')}
-        />
-      </motion.div>
+      {visibleControls.chat && (always ? (
+        <AgentChatInput chatOpen={isConnected} persistent onSend={handleSendMessage} />
+      ) : (
+        <motion.div
+          {...MOTION_PROPS}
+          inert={!chatOpen}
+          animate={chatOpen ? 'visible' : 'hidden'}
+          className="border-input/50 flex w-full items-start overflow-hidden border-b"
+        >
+          <AgentChatInput chatOpen={chatOpen} onSend={handleSendMessage} className={cn(variant === 'livekit' && '[&_button]:rounded-full')} />
+        </motion.div>
+      ))}
 
       <div className="flex gap-1">
         <div className="flex grow gap-1">
@@ -320,7 +329,7 @@ export function AgentControlBar({
               aria-label="Toggle microphone"
               source={Track.Source.Microphone}
               pressed={microphoneToggle.enabled}
-              disabled={microphoneToggle.pending}
+              disabled={microphoneToggle.pending || (always && !isConnected)}
               audioTrack={microphoneTrack}
               onPressedChange={microphoneToggle.toggle}
               onActiveDeviceChange={handleAudioDeviceChange}
@@ -370,10 +379,10 @@ export function AgentControlBar({
           )}
 
           {/* Toggle Transcript */}
-          {visibleControls.chat && (
+          {visibleControls.chat && !always && (
             <Toggle
               variant={variant === 'outline' ? 'outline' : 'default'}
-              pressed={isChatOpen || isChatOpenUncontrolled}
+              pressed={chatOpen}
               aria-label="Toggle transcript"
               onPressedChange={(state) => {
                 if (!onIsChatOpenChange) setIsChatOpenUncontrolled(state);
@@ -393,6 +402,7 @@ export function AgentControlBar({
         {visibleControls.leave && (
           <AgentDisconnectButton
             onClick={onDisconnect}
+            aria-label="End call"
             disabled={!isConnected}
             className={cn(
               variant === 'livekit' &&

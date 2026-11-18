@@ -32,6 +32,7 @@ export function mountStudio(openVoice: (design: VoiceDesign, execute: StudioExec
     return out as unknown as KitchenLooks;
   };
   const stageEl = required('#stage'), canvas = required<HTMLCanvasElement>('#scene');
+  const viewControls = required('.stage-tools');
   const inspector = required('#inspector'), hint = required('#hint'), tip = required('#tip');
   let stage: Stage | null = null, kitchen: RoomModel<KitchenLooks> | null = null;
   let releaseTextures: (() => void) | null = null, disposed = false, pendingPick = 0;
@@ -42,7 +43,9 @@ export function mountStudio(openVoice: (design: VoiceDesign, execute: StudioExec
     fallback.hidden = available;
     if (!available) fallback.textContent = message;
     canvas.setAttribute('aria-busy', String(!available));
-    document.querySelectorAll<HTMLButtonElement>('.stage-tools button').forEach((button) => { button.disabled = !available; });
+    if (available) viewControls.removeAttribute('aria-describedby');
+    else viewControls.setAttribute('aria-describedby', 'fallback');
+    viewControls.querySelectorAll<HTMLButtonElement>('button').forEach((button) => { button.disabled = !available; });
   }
   availability(false, 'Loading your 3D kitchen. You can already choose finishes and check your estimate.');
   const sideways = CSS.supports('grid-template-columns', 'subgrid') ? '(orientation: landscape) and (max-height: 540px) and (min-width: 540px)' : 'not all';

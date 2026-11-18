@@ -4,7 +4,12 @@
 .panel[aria-busy="true"] { visibility: hidden; }
 
 /* ================================================================ brand header */
-.masthead { display: grid; gap: var(--s4); padding: var(--s6) var(--s6) var(--s4); min-width: 0; }
+.masthead { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); padding: var(--s4) var(--s4) 0 var(--s6); min-width: 0; }
+@media (min-width:1000px) and (max-width:1199px), (max-width:520px) {
+  .stage-tools .tool { padding-inline: 0; }
+  .stage-tools .tool > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
+@media (max-width:740px) { .masthead { flex-wrap: wrap; } }
 .brand { display: flex; align-items: center; gap: var(--s3); }
 .logo { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--brand); color: var(--on-brand);
   font: 600 15px/1 var(--font); letter-spacing: .02em; box-shadow: var(--lift-1); }
@@ -105,11 +110,6 @@ button.bd-row:active { transform: scale(.985); }
   .workspace { position: sticky; top: 0; z-index: 5; display: block; padding: 0; background: var(--st-1); box-shadow: 0 1px 0 var(--rule); }
   .stage { height: var(--stage-h); border-radius: 0 0 28px 28px; }
   @supports (corner-shape: squircle) { .stage { border-radius: 0 0 42px 42px; } }
-  .stage-tools { top: 10px; right: 10px; left: 10px; max-width: none; flex-wrap: nowrap; }
-  .stage-tools .time-seg { margin-right: auto; }
-  .stage .tool { width: 44px; min-height: 44px; padding: 0; }
-  .stage .tool .t { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  .time-seg .fg-pill { min-height: 44px; padding: 0 14px; }
   .stage-hint { left: 10px; bottom: 10px; padding: 8px 12px; font-size: 12px; }
 
   .dock { gap: 6px; padding: var(--s2) 34px var(--s2) 10px; border-radius: 0; background: none; scroll-padding-inline: 10px;
@@ -148,17 +148,14 @@ button.bd-row:active { transform: scale(.985); }
       padding: 6px max(6px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left)); }
     .workspace { display: contents; }
 
-    /* the brand is the mark in the corner of the stage; its name and the page title stay for screen readers */
-    .masthead { grid-column: 2; grid-row: 1 / 3; justify-self: start; align-self: start; position: relative; z-index: 6; display: block; padding: 8px; pointer-events: none; }
-    .masthead .brand-txt, .masthead .intro, .masthead .call span, .stage .t, .est-head { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    .masthead { grid-column: 2; grid-row: 1; padding: 0; gap: 4px; flex-wrap: nowrap; }
+    .masthead .brand-txt, .stage-tools .fg-pill > span, .est-head { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     .logo { width: 36px; height: 36px; font-size: 13px; }
-    .brand .call { width: 44px; padding: 0; pointer-events: auto; }
+    .stage-tools { gap: 4px; }
+    .stage-tools .fg-pill { padding-inline: 0; }
 
     /* the kitchen */
-    .stage { grid-column: 2; grid-row: 1 / 3; z-index: 1; height: auto; border-radius: 20px; }
-    .stage-tools { top: 8px; right: 8px; left: auto; max-width: calc(100% - 60px); flex-wrap: wrap; gap: 4px; }
-    .stage-tools .time-seg { margin-right: 0; padding: 2px; }
-    .stage .tool, .time-seg .fg-pill { width: 44px; min-height: 44px; padding: 0; }
+    .stage { z-index: 1; height: auto; border-radius: 20px; }
     .stage-hint { left: 8px; bottom: 8px; max-width: calc(100% - 16px); padding: 7px 12px; border-radius: 16px; font-size: 12px; line-height: 1.3; }
 
     /* the steps: a rail that scrolls down its own length */
