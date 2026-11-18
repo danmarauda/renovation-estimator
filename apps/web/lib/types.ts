@@ -21,6 +21,7 @@ export interface BusinessConfig {
   defaultRoom: 'kitchen';
   rooms: { kitchen: Omit<RoomConfig, 'parts'> & { parts: TypedPart[] } };
 }
+export interface VoiceDesign { size: string; step: string; estimate: string; finishes: { id: string; name: string; summary: string }[] }
 export type Choices = Record<string, Record<string, string>>;
 export interface StudioState { size: string; choices: Choices; active: string }
 export interface EstimateTotals { lines: { id: string; name: string; summary: string; range: PriceRange }[]; range: PriceRange }

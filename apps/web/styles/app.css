@@ -67,8 +67,8 @@ body.ws { overflow-x: clip; }
 /* the poster: the default kitchen, shown from first paint until the live view is ready */
 .stage-poster { position: absolute; inset: 0; z-index: -1; width: 100%; height: 100%; object-fit: contain; pointer-events: none; transition: opacity 700ms var(--ease); }
 .stage.is-live .stage-poster { opacity: 0; }
-.stage.is-failed .stage-poster { display: none; }
-.stage.is-failed .stage-fallback { bottom: auto; top: 50%; translate: -50% -50%; }
+.stage.is-failed .stage-poster { opacity: 1; }
+.stage.is-failed .stage-hint, .stage.is-failed .stage-tools { display: none; }
 @media (prefers-reduced-motion: reduce) { #scene, .stage-poster, .stage::before { transition: none; } }
 #scene:active { cursor: grabbing; }
 #scene.is-pointing { cursor: pointer; }

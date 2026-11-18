@@ -1,3 +1,4 @@
+import { VoiceLauncher } from './voice-launcher';
 import cfg from '../lib/business.config';
 import { Icon } from './kitchen-stage';
 
@@ -30,6 +31,7 @@ export function StudioInspector() {
       <div className="est-row"><p className="est-price" aria-hidden="true"><span className="lo" data-price="lo" /><span className="dash">–</span><span className="hi" data-price="hi" /></p><button className="text-btn" type="button" id="breakdownBtn" data-step="summary">Breakdown<Icon name="chev-r" /></button></div>
       <p className="ws-cap est-note">{cfg.estimate.disclaimer}</p><p className="ws-h cta-lead">{cfg.cta.lead}</p>
       <button className="cta" type="button" data-open-consult><span className="cta-label">{cfg.cta.button}</span><span className="cta-dot" aria-hidden="true"><Icon name="arrow" /></span></button>
+      <VoiceLauncher placement="footer" />
     </footer>
   </aside>;
 }

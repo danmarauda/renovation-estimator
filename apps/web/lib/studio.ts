@@ -1,15 +1,15 @@
 // Wiring: config -> page text and brand, the 3D stage, the panel, the consultation sheet.
 import cfg from './business.config.ts';
 import { injectSprite } from './icons.ts';
-import { defaultChoices, optionOf, setFormat, setRounding } from './estimate.ts';
+import { defaultChoices, moneyRange, optionOf, setFormat, setRounding } from './estimate.ts';
 import { createPanel } from './panel.ts';
 import { createConsult } from './consult.ts';
 import { required } from './dom.ts';
-import type { StudioState } from './types.ts';
+import type { StudioState, VoiceDesign } from './types.ts';
 import type { Stage, RoomModel } from '@repo/engine';
 import type { KitchenLooks } from '@repo/engine/looks';
 
-export function mountStudio() {
+export function mountStudio(openVoice: (design: VoiceDesign) => void) {
   injectSprite();
   const events = new AbortController();
   const listen = <K extends keyof HTMLElementEventMap>(el: HTMLElement, type: K, fn: (event: HTMLElementEventMap[K]) => void) => el.addEventListener(type, fn, { signal: events.signal });
@@ -87,6 +87,15 @@ export function mountStudio() {
   const consult = createConsult({ getTotals: () => panel.totals });
   document.querySelectorAll<HTMLElement>('[data-open-consult]').forEach((button) => listen(button, 'click', () => consult.open(button)));
 
+  for (const button of document.querySelectorAll<HTMLButtonElement>('[data-open-voice]')) {
+    button.disabled = false;
+    listen(button, 'click', () => {
+      const size = room.sizes.find((entry) => entry.id === state.size)!;
+      const { range, lines } = panel.totals;
+      openVoice({ size: `${size.name}, ${size.note}`, step: state.active === 'size' ? 'Kitchen size' : room.parts.find((p) => p.id === state.active)?.name ?? 'Estimate', estimate: moneyRange(range), finishes: lines.filter((line) => line.id !== 'base') });
+    });
+  }
+
   function setupPicking() {
     let down: { id: number; x: number; y: number; time: number } | null = null;
     let pointerX = 0, pointerY = 0;
@@ -139,7 +148,7 @@ export function mountStudio() {
       if (disposed) return;
       stage?.dispose(); kitchen?.dispose(); releaseTextures?.(); stage = null; kitchen = null;
       canvas.hidden = true; stageEl.classList.add('is-failed');
-      availability(false, 'The 3D view could not load. You can still choose every option and see your estimate. Try reloading to restore the 3D view.');
+      availability(false, 'Static preview · 3D unavailable. Your selections still update the estimate.');
       canvas.setAttribute('aria-busy', 'false');
       console.error('The 3D kitchen could not be initialised.', error);
     }

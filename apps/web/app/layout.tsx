@@ -5,6 +5,7 @@ import '../styles/frost-glass.css';
 import '../styles/studio-ui.css';
 import '../styles/app.css';
 import '../styles/panel.css';
+import '../styles/rail-voice.css';
 import './globals.css';
 
 const sans = Inter_Tight({ subsets: ['latin'], weight: ['400', '500', '600'], variable: '--font-studio-sans', display: 'swap' });

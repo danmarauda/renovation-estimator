@@ -27,8 +27,30 @@ export function createPanel({ room, state, reducedMotion, signal, on }: PanelOpt
   ];
   const stepOf = (id: string) => steps.find((s) => s.id === id) || steps[0];
   const rule = '<span class="dock-rule" aria-hidden="true"></span>';
-  el.dock.innerHTML = steps.map((s, i) => `${i === 1 || i === steps.length - 1 ? rule : ''}<button class="step" type="button" data-step="${esc(s.id)}" aria-controls="inspector">${icon(s.icon)}<span>${esc(s.name)}</span></button>`).join('');
+  el.dock.innerHTML = steps.map((s, i) => `${i === 1 || i === steps.length - 1 ? rule : ''}<button class="step" type="button" data-step="${esc(s.id)}" aria-controls="inspector" aria-label="${esc(s.name)}">${icon(s.icon)}</button>`).join('');
   listen(el.dock, 'click', (e) => { const b = (e.target as Element).closest<HTMLElement>('[data-step]'); if (b?.dataset.step) on.selectStep(b.dataset.step, 'dock'); });
+  const label = $('#rail-label');
+  let labelTimer = 0;
+  function hideLabel() { clearTimeout(labelTimer); label.removeAttribute('data-open'); }
+  function showLabel(target: EventTarget | null) {
+    const button = target instanceof Element ? target.closest<HTMLElement>('button[data-step]') : null;
+    if (!button) { hideLabel(); return; }
+    clearTimeout(labelTimer);
+    const rect = button.getBoundingClientRect();
+    label.textContent = button.getAttribute('aria-label');
+    label.style.left = `${rect.right + 8}px`;
+    label.style.top = `${rect.top + rect.height / 2}px`;
+    label.setAttribute('data-open', '');
+  }
+  const delayHide = () => { clearTimeout(labelTimer); labelTimer = window.setTimeout(hideLabel, 150); };
+  listen(el.dock, 'pointerover', (e) => { if (e.pointerType !== 'touch') showLabel(e.target); });
+  listen(el.dock, 'focusin', (e) => { if ((e.target as Element).matches(':focus-visible')) showLabel(e.target); });
+  listen(el.dock, 'pointerleave', delayHide); listen(el.dock, 'focusout', hideLabel);
+  listen(el.dock, 'click', hideLabel); listen(label, 'pointerenter', () => clearTimeout(labelTimer));
+  listen(label, 'pointerleave', delayHide);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideLabel(); }, { signal });
+  window.addEventListener('scroll', hideLabel, { capture: true, passive: true, signal });
+  window.addEventListener('resize', hideLabel, { signal });
   const partUnder = (target: EventTarget | null) => { const id = (target as Element).closest<HTMLElement>('[data-step]')?.dataset.step; return id && stepOf(id).part ? id : null; };
   for (const type of ['pointerover', 'focusin'] as const) listen(el.dock, type, (e) => on.previewPart(partUnder(e.target)));
   for (const type of ['pointerleave', 'focusout'] as const) listen(el.dock, type, () => on.previewPart(null));
@@ -208,7 +230,7 @@ export function createPanel({ room, state, reducedMotion, signal, on }: PanelOpt
     focusHeading() { const step = stepOf(state.active); $(step.heading, step.view)?.focus({ preventScroll: true }); },
     get totals() { return totals(room, state.choices, state.size); },
     dispose() {
-      cancelAnimationFrame(raf); cancelAnimationFrame(turnFrame); clearTimeout(deltaTimer); clearTimeout(liveTimer);
+      hideLabel(); cancelAnimationFrame(raf); cancelAnimationFrame(turnFrame); clearTimeout(deltaTimer); clearTimeout(liveTimer);
       turned.removeEventListener('change', onTurn);
     },
   };
